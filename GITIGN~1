@@ -1,0 +1,12 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+__MACOSX/
+*.swp
+.idea/
+.vscode/
+
+# Local notes / secrets — keep real URLs and keys out of the repo
+*.local
+secrets.txt
+.env

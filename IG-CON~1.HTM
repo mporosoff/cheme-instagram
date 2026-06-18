@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dept IG Content Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@1,18,500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C1B19; --ink-soft:#4A4640; --paper:#F4F2ED; --card:#FFFFFF;
+    --line:#E2DDD3; --line-strong:#CFC8BA; --slate:#5B6B73;
+    --glow:#D6531F; --glow-soft:#F0A878; --glow-bg:#FBEAE0;
+    --green:#2E6B4F; --green-bg:#E6F0EA;
+    --radius:10px; --shadow:0 1px 2px rgba(28,27,25,.05), 0 8px 24px rgba(28,27,25,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:"IBM Plex Mono",monospace;}
+  h1,h2,h3,.display{font-family:"Space Grotesk",sans-serif;}
+
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px;background:rgba(244,242,237,.85);backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:11px;min-width:0;}
+  .reactor{width:30px;height:30px;border-radius:7px;flex:none;background:radial-gradient(circle at 50% 120%, var(--glow) 0%, #8A2B0C 65%, #3A1404 100%);box-shadow:0 0 0 1px rgba(0,0,0,.1), 0 0 14px -2px var(--glow);position:relative;}
+  .reactor::after{content:"";position:absolute;inset:6px 6px auto 6px;height:3px;border-radius:2px;background:linear-gradient(90deg,#FFD9A8,#FF7A33);opacity:.9;}
+  .brand h1{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0;white-space:nowrap;}
+  .brand .sub{font-size:12px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  header .acts{display:flex;align-items:center;gap:8px;flex:none;}
+
+  button{font-family:inherit;font-size:14px;cursor:pointer;border:none;background:none;}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;border:1px solid var(--line-strong);background:var(--card);color:var(--ink);font-weight:500;transition:.12s;}
+  .btn:hover{border-color:var(--slate);}
+  .btn.primary{background:var(--glow);border-color:var(--glow);color:#fff;}
+  .btn.primary:hover{background:#BC4716;border-color:#BC4716;}
+  .btn.primary:disabled{background:var(--glow-soft);border-color:var(--glow-soft);cursor:not-allowed;}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--slate);padding:8px 10px;}
+  .btn.ghost:hover{color:var(--ink);background:rgba(0,0,0,.04);}
+  .btn.sm{padding:6px 11px;font-size:13px;}
+  .btn.green{background:var(--green);border-color:var(--green);color:#fff;}
+  .btn.green:hover{background:#245540;border-color:#245540;}
+  button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--glow);outline-offset:2px;}
+
+  main{max-width:1240px;margin:0 auto;padding:22px;display:grid;grid-template-columns:1fr 1.15fr;gap:22px;align-items:start;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .panel-head{display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--slate);}
+  .panel-body{padding:18px;}
+
+  .types{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:8px;margin-bottom:18px;}
+  .type{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--line);border-radius:9px;background:var(--paper);font-size:12.5px;font-weight:500;color:var(--ink-soft);text-align:center;transition:.12s;}
+  .type svg{width:20px;height:20px;}
+  .type:hover{border-color:var(--line-strong);}
+  .type.active{background:var(--glow-bg);border-color:var(--glow);color:#8A2B0C;}
+
+  label.fld{display:block;margin-bottom:14px;}
+  label.fld .lab{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  label.fld .hint{font-weight:400;color:var(--slate);}
+  input[type=text],input[type=date],input[type=color],textarea,select{width:100%;font-family:inherit;font-size:14px;color:var(--ink);padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;}
+  input[type=color]{height:38px;padding:4px;cursor:pointer;}
+  textarea{resize:vertical;min-height:84px;line-height:1.5;}
+  .row{display:flex;gap:10px;}
+  .row > *{flex:1;}
+  .doi-row{display:flex;gap:8px;}
+  .doi-row input{flex:1;}
+
+  .meta-card{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;}
+  .meta-card .t{font-weight:600;margin-bottom:3px;}
+  .meta-card .m{color:var(--slate);}
+
+  .drop{border:1.5px dashed var(--line-strong);border-radius:9px;padding:18px;text-align:center;color:var(--slate);font-size:13.5px;cursor:pointer;transition:.12s;background:var(--paper);}
+  .drop:hover{border-color:var(--glow);color:var(--glow);}
+  .thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .thumb{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line);}
+  .thumb img{width:100%;height:100%;object-fit:cover;}
+  .thumb button{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;}
+
+  .glowbar{height:3px;border-radius:2px;background:var(--line);overflow:hidden;}
+  .glowbar.on::before{content:"";display:block;height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--glow),#FFC78A,var(--glow),transparent);animation:ramp 1.1s ease-in-out infinite;}
+  @keyframes ramp{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+
+  /* draft panel */
+  .out-empty{color:var(--slate);font-size:14px;text-align:center;padding:48px 14px;line-height:1.6;}
+  .out-empty .reactor{margin:0 auto 14px;width:40px;height:40px;}
+  .tabs{display:flex;gap:4px;padding:4px;background:var(--paper);border-radius:9px;margin-bottom:16px;}
+  .tab{flex:1;padding:8px;border-radius:7px;font-weight:600;font-size:13.5px;color:var(--slate);text-align:center;}
+  .tab.active{background:var(--card);color:var(--ink);box-shadow:var(--shadow);}
+
+  .caption-out{width:100%;min-height:140px;font-size:14.5px;}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:6px;padding:3px 8px;}
+  .tag.on{background:var(--glow-bg);border:1px solid var(--glow-soft);color:#8A2B0C;cursor:pointer;}
+  .counts{display:flex;gap:16px;margin-top:12px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--slate);}
+  .counts b{color:var(--ink);font-weight:500;}
+  .counts .warn{color:var(--glow);}
+  .alt{margin-top:14px;font-size:13px;color:var(--ink-soft);}
+  .alt .lab{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);display:block;margin-bottom:4px;}
+  .out-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;}
+
+  /* graphic tab */
+  .canvas-wrap{display:flex;justify-content:center;background:var(--paper);border-radius:10px;padding:14px;border:1px solid var(--line);}
+  #card{width:100%;max-width:340px;height:auto;border-radius:6px;box-shadow:var(--shadow);display:block;}
+  .gctrls{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .gctrls .full{grid-column:1 / -1;}
+  .gctrls label.fld{margin-bottom:0;}
+  .seg{display:flex;gap:4px;padding:3px;background:var(--paper);border-radius:8px;}
+  .seg button{flex:1;padding:6px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--slate);}
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow);}
+
+  /* queue */
+  .queue-wrap{max-width:1240px;margin:0 auto 40px;padding:0 22px;}
+  .queue-head{display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px;}
+  .queue-head h2{font-size:16px;margin:0;}
+  .qcount{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--slate);}
+  .qlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
+  .qcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:var(--shadow);}
+  .qcard .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:20px;background:var(--green-bg);color:var(--green);}
+  .qcard .cap{font-size:13px;line-height:1.5;max-height:84px;overflow:hidden;color:var(--ink-soft);}
+  .qcard .qacts{display:flex;gap:6px;margin-top:10px;}
+  .qempty{color:var(--slate);font-size:13.5px;padding:8px 0;}
+
+  .scrim{position:fixed;inset:0;background:rgba(28,27,25,.45);display:flex;align-items:center;justify-content:center;padding:18px;z-index:50;}
+  .modal{background:var(--card);border-radius:14px;max-width:480px;width:100%;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:90vh;overflow:auto;}
+  .modal h2{margin:0 0 6px;font-size:19px;}
+  .modal p{color:var(--ink-soft);font-size:13.5px;margin:0 0 16px;}
+  .modal .note{font-size:12px;color:var(--slate);margin-top:12px;line-height:1.5;}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:9px;font-size:13.5px;opacity:0;pointer-events:none;transition:.22s;z-index:60;box-shadow:var(--shadow);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .err{background:var(--glow-bg);border:1px solid var(--glow-soft);color:#8A2B0C;border-radius:8px;padding:10px 12px;font-size:13px;margin-top:12px;}
+  .hide{display:none !important;}
+
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;padding:14px;gap:14px;}
+    .brand .sub{display:none;}
+    .gctrls{grid-template-columns:1fr;}
+    .panel-body{padding:15px;}
+    input[type=text],input[type=date],textarea,select{font-size:16px;} /* stops iOS zoom-on-focus */
+    .modal .row{flex-direction:column;gap:0;}
+    .out-acts .btn{flex:1;justify-content:center;}
+    #cardDisp{max-width:100% !important;}
+  }
+  @media (prefers-reduced-motion:reduce){ .glowbar.on::before{animation:none;width:100%;opacity:.5;} *{transition:none !important;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="reactor" aria-hidden="true"></div>
+    <div style="min-width:0"><h1>Dept IG Content Studio</h1><div class="sub" id="brandSub">Source → caption + graphic → approve</div></div>
+  </div>
+  <div class="acts">
+    <button class="btn ghost sm" id="settingsBtn">Voice &amp; brand</button>
+    <button class="btn ghost sm" id="keyBtn">API key</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head"><span class="eyebrow">01 / Source</span></div>
+    <div class="panel-body">
+      <div class="types" id="types"></div>
+      <div id="formArea"></div>
+      <div class="glowbar" id="glowbar" style="margin-top:6px"></div>
+      <button class="btn primary" id="draftBtn" style="margin-top:16px;width:100%;justify-content:center">Generate post</button>
+      <div id="srcErr"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="eyebrow">02 / Caption &amp; graphic</span></div>
+    <div class="panel-body" id="outArea">
+      <div class="out-empty">
+        <div class="reactor" aria-hidden="true"></div>
+        Add your material and hit <b>Generate post</b>.<br>
+        You get an editable caption <i>and</i> a ready-to-post 1080×1080 graphic.
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="queue-wrap">
+  <div class="queue-head"><h2>Approved &amp; ready to schedule</h2><span class="qcount" id="qcount"></span></div>
+  <div class="qlist" id="qlist"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<canvas id="card" width="1080" height="1080"></canvas>
+
+<script>
+/* ===== storage (graceful fallback) ===== */
+const mem={};
+function ssGet(k){try{return sessionStorage.getItem(k);}catch(e){return mem[k]??null;}}
+function ssSet(k,v){try{sessionStorage.setItem(k,v);}catch(e){mem[k]=v;}}
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return mem[k]??null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
+
+/* ===== settings ===== */
+const DEFAULTS={
+  dept:"Department of Chemical & Sustainability Engineering",
+  handle:"@ur.cheme",
+  voice:"Professional but warm and accessible. Curious and proud of the work. Plain language a smart undergrad or the public can follow; explain the 'why it matters' without hype.",
+  hashtags:"ChemicalEngineering, Catalysis, Research, STEM, Engineering",
+  length:"medium", model:"claude-sonnet-4-6",
+  accent:"#D6531F", theme:"dark", logo:"", publishUrl:""
+};
+function getSettings(){try{return {...DEFAULTS,...JSON.parse(lsGet("igs2_settings")||"{}")};}catch(e){return {...DEFAULTS};}}
+function saveSettings(s){lsSet("igs2_settings",JSON.stringify(s));applyBranding();}
+function applyBranding(){document.getElementById("brandSub").textContent=getSettings().handle||"Source → caption + graphic → approve";}
+
+/* ===== content types ===== */
+const TYPES=[
+  {id:"paper",label:"Paper",icon:'<path d="M5 3h9l5 5v13H5z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.6"/>'},
+  {id:"event",label:"Event",icon:'<rect x="4" y="5" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 9h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="1.6"/>'},
+  {id:"photo",label:"Photo",icon:'<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="11" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 18l5-4 4 3 3-3 2 2" fill="none" stroke="currentColor" stroke-width="1.6"/>'},
+  {id:"repost",label:"Repost",icon:'<path d="M4 9V7a3 3 0 0 1 3-3h9l-2-2m2 2-2 2M20 15v2a3 3 0 0 1-3 3H8l2 2m-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'},
+  {id:"reel",label:"Reel",icon:'<rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h18M8 4l2.5 4M13 4l2.5 4" stroke="currentColor" stroke-width="1.6"/><path d="M10 12.5v3l3-1.5z" fill="currentColor"/>'}
+];
+let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="";
+
+function renderTypes(){
+  const c=document.getElementById("types");c.innerHTML="";
+  TYPES.forEach(t=>{const b=document.createElement("button");b.className="type"+(t.id===activeType?" active":"");
+    b.innerHTML=`<svg viewBox="0 0 24 24">${t.icon}</svg>${t.label}`;
+    b.onclick=()=>{activeType=t.id;renderTypes();renderForm();};c.appendChild(b);});
+}
+function renderForm(){
+  const a=document.getElementById("formArea");
+  if(activeType==="paper"){
+    a.innerHTML=`<label class="fld"><span class="lab">DOI <span class="hint">— auto-fetches title, authors & abstract</span></span>
+      <div class="doi-row"><input type="text" id="doi" placeholder="10.1021/jacs.xxxxxx" autocomplete="off"><button class="btn sm" id="fetchDoi">Fetch</button></div></label>
+      <div id="paperMetaBox"></div>
+      <label class="fld"><span class="lab">Or paste the abstract / a one-line summary</span><textarea id="paperText" placeholder="Paste the abstract or describe the finding..."></textarea></label>
+      <label class="fld"><span class="lab">Angle <span class="hint">(optional)</span></span><input type="text" id="paperAngle" placeholder="e.g. celebrate the grad-student first author"></label>
+      ${figureSlot("Add a figure / TOC graphic (optional)")}`;
+    if(paperMeta)renderPaperMeta();
+    document.getElementById("fetchDoi").onclick=fetchDoi; wireFigure();
+  } else if(activeType==="event"){
+    a.innerHTML=`<label class="fld"><span class="lab">Event title</span><input type="text" id="evTitle" placeholder="Spring Seminar: Catalysis for a Carbon-Negative Future"></label>
+      <div class="row"><label class="fld"><span class="lab">Date</span><input type="date" id="evDate"></label><label class="fld"><span class="lab">Time</span><input type="text" id="evTime" placeholder="3:30 PM"></label></div>
+      <label class="fld"><span class="lab">Location</span><input type="text" id="evLoc" placeholder="Goergen Hall 101"></label>
+      <label class="fld"><span class="lab">Details</span><textarea id="evDesc" placeholder="Speaker, topic, who should come, RSVP..."></textarea></label>
+      <label class="fld"><span class="lab">Link <span class="hint">(optional)</span></span><input type="text" id="evLink" placeholder="https://..."></label>
+      ${figureSlot("Add a speaker photo / poster (optional)")}`;
+    wireFigure();
+  } else if(activeType==="photo"){
+    a.innerHTML=`<div class="drop" id="drop">Drop a photo or <b>click to upload</b><br><span style="font-size:12px">This image becomes the post — JPEG works best</span></div>
+      <input type="file" id="fileInput" accept="image/*" class="hide">
+      <div class="thumbs" id="thumbs"></div>
+      <label class="fld" style="margin-top:14px"><span class="lab">What's in the photo? <span class="hint">(helps the caption)</span></span><textarea id="photoNote" placeholder="e.g. Undergrad running the pulsed-Joule reactor..."></textarea></label>`;
+    const drop=document.getElementById("drop"),fi=document.getElementById("fileInput");
+    drop.onclick=()=>fi.click();
+    drop.ondragover=e=>{e.preventDefault();drop.style.borderColor="var(--glow)";};
+    drop.ondragleave=()=>{drop.style.borderColor="";};
+    drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";handlePhoto(e.dataTransfer.files);};
+    fi.onchange=e=>handlePhoto(e.target.files); renderThumbs();
+  } else if(activeType==="repost"){
+    a.innerHTML=`<label class="fld"><span class="lab">Original author's handle</span><input type="text" id="rpHandle" placeholder="@labmate"></label>
+      <label class="fld"><span class="lab">What did they post?</span><textarea id="rpWhat" placeholder="Paste their caption or describe the achievement..."></textarea></label>
+      <label class="fld"><span class="lab">Why amplify it? <span class="hint">(optional)</span></span><input type="text" id="rpWhy" placeholder="e.g. best poster at AIChE"></label>
+      ${figureSlot("Add their image (optional)")}
+      <div class="err" style="background:var(--paper);border-color:var(--line);color:var(--slate)">Tip: get the person's OK before reposting, and credit them.</div>`;
+    wireFigure();
+  } else if(activeType==="reel"){
+    a.innerHTML=`<label class="fld"><span class="lab">Video link <span class="hint">— what actually gets posted (Drive/Dropbox, set to "anyone with link")</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/..."></label>
+      <div class="drop" id="reelDrop">Tap to add the clip — used only to grab a cover frame &amp; help write the caption<br><span style="font-size:12px">Stays on your device; not uploaded anywhere</span></div>
+      <input type="file" id="reelFile" accept="video/*" class="hide">
+      <div class="thumbs" id="reelThumb"></div>
+      <label class="fld" style="margin-top:14px"><span class="lab">What happens in the Reel? <span class="hint">(helps the caption)</span></span><textarea id="reelNote" placeholder="e.g. 15s walkthrough of the pulsed-Joule reactor lighting up..."></textarea></label>`;
+    const drop=document.getElementById("reelDrop"),fi=document.getElementById("reelFile");
+    drop.onclick=()=>fi.click();
+    drop.ondragover=e=>{e.preventDefault();drop.style.borderColor="var(--glow)";};
+    drop.ondragleave=()=>{drop.style.borderColor="";};
+    drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";handleReel(e.dataTransfer.files[0]);};
+    fi.onchange=e=>handleReel(e.target.files[0]); renderReelThumb();
+  }
+}
+function handleReel(f){
+  if(!f||!f.type.startsWith("video/"))return;
+  const drop=document.getElementById("reelDrop"); if(drop)drop.textContent="Reading the clip…";
+  grabFrame(f).then(url=>{
+    reelCover=url;
+    if(drop)drop.innerHTML = url?"Cover frame captured ✓ — tap to use a different clip":"Couldn't read that clip — you can still caption from your note";
+    renderReelThumb();
+    if(currentGraphic){currentGraphic.figure=reelCover;drawCard("cardDisp");}
+  });
+}
+function grabFrame(file){
+  return new Promise(res=>{
+    try{
+      const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";v.src=URL.createObjectURL(file);
+      v.onloadeddata=()=>{v.currentTime=Math.min(1,(v.duration||2)*0.25);};
+      v.onseeked=()=>{try{const c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);res(c.toDataURL("image/jpeg",0.9));}catch(e){res(null);}URL.revokeObjectURL(v.src);};
+      v.onerror=()=>res(null);
+    }catch(e){res(null);}
+  });
+}
+function renderReelThumb(){const t=document.getElementById("reelThumb");if(!t)return;t.innerHTML="";if(reelCover){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${reelCover}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{reelCover=null;renderReelThumb();const dr=document.getElementById("reelDrop");if(dr)dr.textContent="Tap to add the clip — used only to grab a cover frame & help write the caption";if(currentGraphic){currentGraphic.figure=null;drawCard("cardDisp");}};t.appendChild(d);}}
+function figureSlot(label){
+  return `<label class="fld"><span class="lab">${label}</span>
+    <div class="drop" id="figDrop" style="padding:14px">Drop or <b>click to add an image</b></div>
+    <input type="file" id="figInput" accept="image/*" class="hide">
+    <div class="thumbs" id="figThumb"></div></label>`;
+}
+function wireFigure(){
+  const drop=document.getElementById("figDrop"),fi=document.getElementById("figInput");
+  if(!drop)return;
+  drop.onclick=()=>fi.click();
+  drop.ondragover=e=>{e.preventDefault();drop.style.borderColor="var(--glow)";};
+  drop.ondragleave=()=>{drop.style.borderColor="";};
+  drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";readFigure(e.dataTransfer.files[0]);};
+  fi.onchange=e=>readFigure(e.target.files[0]);
+  renderFigThumb();
+}
+function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; const r=new FileReader(); r.onload=()=>{figure={dataUrl:r.result,name:f.name,mediaType:f.type};renderFigThumb();if(currentGraphic){currentGraphic.figure=figure.dataUrl;drawCard();}}; r.readAsDataURL(f); }
+function renderFigThumb(){ const t=document.getElementById("figThumb"); if(!t)return; t.innerHTML=""; if(figure){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${figure.dataUrl}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{figure=null;renderFigThumb();if(currentGraphic){currentGraphic.figure=null;drawCard();}};t.appendChild(d);} }
+function renderPaperMeta(){const box=document.getElementById("paperMetaBox");if(!box||!paperMeta)return;box.innerHTML=`<div class="meta-card"><div class="t">${esc(paperMeta.title)}</div><div class="m">${esc(paperMeta.authors)}${paperMeta.journal?" · "+esc(paperMeta.journal):""}${paperMeta.year?" · "+paperMeta.year:""}</div></div>`;}
+
+/* ===== photo (becomes the post) ===== */
+function handlePhoto(list){const f=list[0];if(!f||!f.type.startsWith("image/"))return;const r=new FileReader();r.onload=()=>{photos=[{dataUrl:r.result,name:f.name,mediaType:f.type}];renderThumbs();};r.readAsDataURL(f);}
+function renderThumbs(){const t=document.getElementById("thumbs");if(!t)return;t.innerHTML="";photos.forEach((p,i)=>{const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${p.dataUrl}" alt=""><button>×</button>`;d.querySelector("button").onclick=()=>{photos.splice(i,1);renderThumbs();};t.appendChild(d);});}
+
+/* ===== DOI via Crossref (slash-safe) ===== */
+async function fetchDoi(){
+  let raw=(document.getElementById("doi").value||"").trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
+  if(!raw){toast("Enter a DOI first");return;}
+  const path=raw.split("/").map(encodeURIComponent).join("/"); // keep the slash
+  const btn=document.getElementById("fetchDoi");btn.textContent="…";btn.disabled=true;
+  try{
+    const r=await fetch("https://api.crossref.org/works/"+path+"?mailto=studio@example.edu",{headers:{"Accept":"application/json"}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const m=(await r.json()).message;
+    const auth=(m.author||[]).slice(0,4).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ")+((m.author||[]).length>4?", et al.":"");
+    paperMeta={title:(m.title&&m.title[0])||"(untitled)",authors:auth||"",journal:(m["container-title"]&&m["container-title"][0])||"",year:(((m.published||{})["date-parts"]||[[]])[0]||[])[0]||"",abstract:(m.abstract||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()};
+    renderPaperMeta();
+    if(paperMeta.abstract)document.getElementById("paperText").value=paperMeta.abstract;
+    toast("Fetched ✓");
+  }catch(e){console.error("DOI fetch failed:",e);toast("Couldn't fetch that DOI — paste the abstract instead");}
+  btn.textContent="Fetch";btn.disabled=false;
+}
+
+/* ===== build brief ===== */
+function buildBrief(){
+  if(activeType==="paper"){
+    const txt=val("paperText"),angle=val("paperAngle");
+    if(!txt&&!paperMeta)return{error:"Add a DOI or paste an abstract first."};
+    let b="CONTENT TYPE: New research paper highlight.\n";
+    if(paperMeta)b+=`Title: ${paperMeta.title}\nAuthors: ${paperMeta.authors}\nJournal: ${paperMeta.journal} ${paperMeta.year}\n`;
+    if(txt)b+=`Summary/abstract: ${txt}\n`; if(angle)b+=`Angle: ${angle}\n`;
+    return{brief:b,meta1:paperMeta?paperMeta.authors:"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
+  }
+  if(activeType==="event"){
+    const title=val("evTitle"); if(!title)return{error:"Give the event a title first."};
+    let b="CONTENT TYPE: Event / announcement.\nTitle: "+title+"\n";
+    const date=val("evDate"),time=val("evTime"),loc=val("evLoc"),desc=val("evDesc"),link=val("evLink");
+    if(date||time)b+=`When: ${date}${time?" "+time:""}\n`; if(loc)b+=`Where: ${loc}\n`; if(desc)b+=`Details: ${desc}\n`; if(link)b+=`Link: ${link}\n`;
+    const dstr=date?new Date(date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}):"";
+    return{brief:b,meta1:[dstr,time].filter(Boolean).join(" · "),meta2:loc,eyebrow:"Event",headlineHint:title};
+  }
+  if(activeType==="reel"){
+    const note=val("reelNote"); reelVideoLink=val("reelLink");
+    if(!note && !reelCover && !reelVideoLink)return{error:"Add the video link, a clip, or a note about the Reel."};
+    let b="CONTENT TYPE: Instagram Reel (short vertical video). Write a Reel-style caption with a strong first-line hook"+(reelCover?" for the attached cover frame.":".")+"\n";
+    if(note)b+=`What happens: ${note}\n`;
+    return{brief:b,withImage:!!reelCover,meta1:getSettings().handle,meta2:"",eyebrow:"Reel"};
+  }
+  if(activeType==="photo"){
+    const note=val("photoNote");
+    let b="CONTENT TYPE: Photo post (lab life / people). Write a caption for the attached image.\n";
+    if(note)b+=`Context: ${note}\n`;
+    return{brief:b,withImage:true,meta1:getSettings().handle,meta2:"",eyebrow:""};
+  }
+  if(activeType==="repost"){
+    const handle=val("rpHandle"),what=val("rpWhat");
+    if(!what)return{error:"Describe what they posted first."};
+    let b="CONTENT TYPE: Reposting a department member's content. Credit them clearly.\n";
+    if(handle)b+=`Original author: ${handle}\n`; b+=`What they shared: ${what}\n`;
+    const why=val("rpWhy"); if(why)b+=`Why amplify: ${why}\n`;
+    return{brief:b,meta1:handle?"via "+handle:"",meta2:"",eyebrow:"Spotlight"};
+  }
+  return{error:"Pick a content type."};
+}
+
+/* ===== Claude ===== */
+const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
+let lastBuilt=null;
+async function draft(){
+  const key=ssGet("igs2_key"); if(!key){openKeyModal();return;}
+  const built=buildBrief(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
+  if(built.error){errBox.innerHTML=`<div class="err">${built.error}</div>`;return;}
+  lastBuilt=built;
+  const s=getSettings();
+  const sys=`You are the social-media editor for ${s.dept}${s.handle?` (Instagram ${s.handle})`:""}, a university engineering department.
+You produce TWO things from each brief: (1) a feed CAPTION and (2) the short TEXT THAT GOES ON THE GRAPHIC ITSELF.
+Voice: ${s.voice}
+Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. No markdown. Emoji sparingly if it fits.
+Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
+Graphic text must be SHORT and legible on a phone-sized square: headline punchy (<= 8 words), subhead a single clause.
+Hashtags: mix broad + niche/academic, no # symbol, max 30. Themes: ${s.hashtags}
+Return ONLY valid JSON, no preamble, no code fences:
+{"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
+  const content=[{type:"text",text:"Brief:\n\n"+built.brief}];
+  if(built.withImage&&activeType==="reel"&&reelCover){content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:reelCover.split(",")[1]}});}
+  else if(built.withImage)photos.forEach(p=>content.push({type:"image",source:{type:"base64",media_type:p.mediaType||"image/jpeg",data:p.dataUrl.split(",")[1]}}));
+  setLoading(true);
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:s.model,max_tokens:1200,system:sys,messages:[{role:"user",content}]})});
+    if(res.status===401){setLoading(false);errBox.innerHTML=`<div class="err">API key was rejected — check it under "API key".</div>`;return;}
+    if(!res.ok){throw new Error((await res.text()).slice(0,160));}
+    const data=await res.json();
+    const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").replace(/```json|```/g,"").trim();
+    let p; try{p=JSON.parse(text);}catch(e){const m=text.match(/\{[\s\S]*\}/);p=m?JSON.parse(m[0]):{caption:text,hashtags:[],alt_text:"",headline:"",subhead:"",pull_quote:""};}
+    initOutput(p,built);
+  }catch(e){errBox.innerHTML=`<div class="err">Something went wrong: ${esc(String(e.message||e).slice(0,160))}</div>`;}
+  setLoading(false);
+}
+function setLoading(on){document.getElementById("glowbar").className="glowbar"+(on?" on":"");const b=document.getElementById("draftBtn");b.disabled=on;b.textContent=on?"Generating…":"Generate post";}
+
+/* ===== output state ===== */
+let current=null, currentGraphic=null, activeTab="caption";
+function initOutput(p,built){
+  current={caption:p.caption||"",hashtags:(p.hashtags||[]).map(h=>String(h).replace(/^#/,"")),alt_text:p.alt_text||"",type:activeType};
+  const s=getSettings();
+  currentGraphic={
+    template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
+    theme:s.theme, accent:s.accent, logo:s.logo||"",
+    headline:p.headline||built.headlineHint||"", subhead:p.subhead||"",
+    pull_quote:p.pull_quote||p.subhead||"", eyebrow:built.eyebrow||"",
+    meta1:built.meta1||"", meta2:built.meta2||"",
+    figure: activeType==="photo"?(photos[0]&&photos[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
+    handle:s.handle, dept:s.dept
+  };
+  renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
+}
+function renderOutput(){
+  document.getElementById("outArea").innerHTML=`
+    <div class="tabs"><div class="tab" data-t="caption">Caption</div><div class="tab" data-t="graphic">Graphic</div></div>
+    <div id="tabBody"></div>`;
+  document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{activeTab=t.dataset.t;renderTab();});
+  renderTab();
+}
+function renderTab(){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.t===activeTab));
+  activeTab==="caption"?renderCaptionTab():renderGraphicTab();
+}
+function renderCaptionTab(){
+  const a=document.getElementById("tabBody");
+  a.innerHTML=`<textarea class="caption-out" id="capOut"></textarea>
+    <div class="counts"><span><b id="charCount">0</b> chars <span id="charNote"></span></span><span><b id="tagCount">0</b>/30 tags</span></div>
+    <div class="tags" id="tagBox"></div>
+    <div class="alt"><span class="lab">Alt text</span><span id="altText"></span></div>
+    <div class="out-acts"><button class="btn" id="copyCap">Copy caption</button><button class="btn" id="copyAll">Copy caption + tags</button><button class="btn ghost" id="regen">Regenerate</button></div>`;
+  const cap=document.getElementById("capOut");cap.value=current.caption;cap.oninput=()=>{current.caption=cap.value;updateCounts();};
+  document.getElementById("altText").textContent=current.alt_text||"—";
+  renderTags();updateCounts();
+  document.getElementById("copyCap").onclick=()=>copy(current.caption,"Caption copied");
+  document.getElementById("copyAll").onclick=()=>copy(current.caption+"\n\n"+current.hashtags.map(h=>"#"+h).join(" "),"Copied");
+  document.getElementById("regen").onclick=draft;
+}
+function renderTags(){const box=document.getElementById("tagBox");if(!box)return;box.innerHTML="";current.hashtags.forEach((h,i)=>{const s=document.createElement("span");s.className="tag on";s.textContent="#"+h;s.title="Remove";s.onclick=()=>{current.hashtags.splice(i,1);renderTags();updateCounts();};box.appendChild(s);});}
+function updateCounts(){const cc=document.getElementById("charCount");if(!cc)return;const n=current.caption.length;cc.textContent=n;const note=document.getElementById("charNote");if(n>2200){note.textContent="(over IG's 2,200 limit)";note.className="warn";}else if(n>300){note.textContent="(long — shorter often reaches further)";note.className="";}else{note.textContent="";note.className="";}const tc=document.getElementById("tagCount");if(tc)tc.textContent=current.hashtags.length;}
+
+function renderGraphicTab(){
+  const a=document.getElementById("tabBody");
+  const g=currentGraphic;
+  a.innerHTML=`
+    <div class="canvas-wrap"><canvas id="cardDisp" width="1080" height="1080" style="width:100%;max-width:${g.template==="reel"?"230px":"340px"};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
+    <div class="gctrls">
+      <label class="fld full"><span class="lab">Template</span>
+        <select id="gTemplate">
+          <option value="paper"${g.template==="paper"?" selected":""}>Paper card (1:1)</option>
+          <option value="event"${g.template==="event"?" selected":""}>Event card (1:1)</option>
+          <option value="quote"${g.template==="quote"?" selected":""}>Quote / spotlight (1:1)</option>
+          <option value="photo"${g.template==="photo"?" selected":""}>Photo + overlay (1:1)</option>
+          <option value="reel"${g.template==="reel"?" selected":""}>Reel cover (9:16)</option>
+        </select></label>
+      <label class="fld"><span class="lab">Theme</span><div class="seg" id="gTheme"><button data-v="dark" class="${g.theme==="dark"?"on":""}">Dark</button><button data-v="light" class="${g.theme==="light"?"on":""}">Light</button></div></label>
+      <label class="fld"><span class="lab">Accent</span><input type="color" id="gAccent" value="${g.accent}"></label>
+      <label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>
+      <label class="fld full"><span class="lab" id="subLab">Subhead</span><input type="text" id="gSub" value="${esc(g.template==="quote"?g.pull_quote:g.subhead)}"></label>
+      <label class="fld"><span class="lab">Detail line 1</span><input type="text" id="gM1" value="${esc(g.meta1)}"></label>
+      <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>
+    </div>
+    <div class="out-acts"><button class="btn primary" id="dlGraphic">Download JPEG (1080²)</button><button class="btn green" id="approveBtn">Approve → queue</button></div>`;
+  const redraw=()=>{
+    g.template=v("gTemplate"); g.accent=v("gAccent"); g.headline=v("gHead");
+    if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
+    g.meta1=v("gM1"); g.meta2=v("gM2");
+    document.getElementById("subLab").textContent=g.template==="quote"?"Quote text":"Subhead";
+    const dc=document.getElementById("cardDisp"); if(dc)dc.style.maxWidth=(g.template==="reel"?"230px":"340px");
+    drawCard("cardDisp");
+  };
+  ["gTemplate","gAccent","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);el.oninput=redraw;el.onchange=redraw;});
+  document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));drawCard("cardDisp");});
+  document.getElementById("dlGraphic").onclick=downloadGraphic;
+  document.getElementById("approveBtn").onclick=approve;
+  drawCard("cardDisp");
+}
+function v(id){const e=document.getElementById(id);return e?(e.value||""):"";}
+
+/* ===== canvas rendering ===== */
+let fontsReady=false;
+async function ensureFonts(){if(fontsReady)return;try{await Promise.all([document.fonts.load("700 80px 'Space Grotesk'"),document.fonts.load("600 40px 'Space Grotesk'"),document.fonts.load("500 34px 'IBM Plex Sans'"),document.fonts.load("500 26px 'IBM Plex Mono'"),document.fonts.load("500 italic 40px 'Newsreader'")]);await document.fonts.ready;}catch(e){}fontsReady=true;}
+function loadImg(src){return new Promise(res=>{if(!src)return res(null);const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src;});}
+function wrap(ctx,text,maxW){const words=String(text||"").split(/\s+/);const lines=[];let line="";for(const w of words){const test=line?line+" "+w:w;if(ctx.measureText(test).width>maxW&&line){lines.push(line);line=w;}else line=test;}if(line)lines.push(line);return lines;}
+function fitLines(ctx,text,{maxW,maxH,weight,family,max,min,lh}){let size=max;for(;size>=min;size-=2){ctx.font=`${weight} ${size}px ${family}`;const lines=wrap(ctx,text,maxW);if(lines.length*size*lh<=maxH)return{size,lines};}ctx.font=`${weight} ${min}px ${family}`;return{size:min,lines:wrap(ctx,text,maxW)};}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function coverDraw(ctx,img,x,y,w,h){const ir=img.width/img.height,r=w/h;let sw,sh,sx,sy;if(ir>r){sh=img.height;sw=sh*r;sx=(img.width-sw)/2;sy=0;}else{sw=img.width;sh=sw/r;sx=0;sy=(img.height-sh)/2;}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);}
+
+async function drawCard(canvasId){
+  await ensureFonts();
+  const g=currentGraphic; if(!g)return;
+  const canvas=document.getElementById(canvasId||"cardDisp")||document.getElementById("card");
+  const reel=(g.template==="reel");
+  const W=1080, H=reel?1920:1080, P=92;
+  canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext("2d");
+  const dark=g.theme==="dark";
+  const bg=dark?"#1C1B19":"#F4F2ED", fg=dark?"#F4F2ED":"#1C1B19", muted=dark?"#A89F90":"#5B6B73", acc=g.accent||"#D6531F";
+  ctx.clearRect(0,0,W,H); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.textBaseline="top";
+
+  const fig = g.figure ? await loadImg(g.figure) : null;
+
+  if(g.template==="photo"||reel){
+    if(fig)coverDraw(ctx,fig,0,0,W,H); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
+    const grad=ctx.createLinearGradient(0,H*0.45,0,H);grad.addColorStop(0,"rgba(15,13,11,0)");grad.addColorStop(1,"rgba(15,13,11,0.86)");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+    if(reel){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.9)";ctx.fillText("▶ REEL",P,P);}
+    ctx.fillStyle=acc;roundRect(ctx,P,H-300,84,8,4);ctx.fill();
+    if(g.headline){const f=fitLines(ctx,g.headline,{maxW:W-P*2,maxH:200,weight:"700",family:"'Space Grotesk'",max:78,min:40,lh:1.08});ctx.fillStyle="#fff";let y=H-270;ctx.font=`700 ${f.size}px 'Space Grotesk'`;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=f.size*1.08;});}
+    ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,H-92);
+    return paint(canvasId);
+  }
+
+  // text cards: top bar
+  ctx.fillStyle=acc; roundRect(ctx,P,P,22,22,5); ctx.fill();
+  ctx.font="500 26px 'IBM Plex Mono'"; ctx.fillStyle=muted;
+  ctx.fillText((g.handle||g.dept||"").toUpperCase(),P+36,P-2);
+  ctx.textAlign="right"; ctx.fillText(new Date().toLocaleDateString(undefined,{month:"short",year:"numeric"}).toUpperCase(),W-P,P-2); ctx.textAlign="left";
+
+  if(g.template==="quote"){
+    const qt=g.pull_quote||g.subhead||g.headline||"";
+    const f=fitLines(ctx,"\u201C"+qt+"\u201D",{maxW:W-P*2,maxH:560,weight:"500 italic",family:"'Newsreader'",max:84,min:40,lh:1.18});
+    ctx.fillStyle=fg; ctx.font=`500 italic ${f.size}px 'Newsreader'`; let y=300; f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=f.size*1.18;});
+    ctx.fillStyle=acc; roundRect(ctx,P,H-188,70,7,4); ctx.fill();
+    ctx.font="600 34px 'Space Grotesk'"; ctx.fillStyle=fg; ctx.fillText(g.meta1||g.handle||"",P,H-150);
+    if(g.meta2){ctx.font="500 28px 'IBM Plex Sans'";ctx.fillStyle=muted;ctx.fillText(g.meta2,P,H-104);}
+    return paint(canvasId);
+  }
+
+  // paper / event
+  let cursor=P+92;
+  if(g.eyebrow){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle=acc;ctx.fillText(g.eyebrow.toUpperCase(),P,cursor);cursor+=66;}
+  const hasFig=!!fig;
+  const headMaxH = hasFig?230:430;
+  const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:headMaxH,weight:"700",family:"'Space Grotesk'",max:hasFig?72:92,min:42,lh:1.07});
+  ctx.fillStyle=fg; ctx.font=`700 ${hf.size}px 'Space Grotesk'`; hf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=hf.size*1.07;});
+  cursor+=14;
+  if(g.subhead && !hasFig){const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:200,weight:"500",family:"'IBM Plex Sans'",max:40,min:28,lh:1.3});ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=sf.size*1.3;});}
+  if(hasFig){const fy=Math.max(cursor+10,440),fh=H-fy-150;ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();coverDraw(ctx,fig,P,fy,W-P*2,fh);ctx.restore();ctx.strokeStyle=dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)";ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();}
+  // footer meta
+  ctx.fillStyle=acc; roundRect(ctx,P,H-150,70,7,4); ctx.fill();
+  if(g.meta1){ctx.font="600 32px 'Space Grotesk'";ctx.fillStyle=fg;ctx.fillText(clip(ctx,g.meta1,W-P*2,"600 32px 'Space Grotesk'"),P,H-112);}
+  if(g.meta2){ctx.font="500 28px 'IBM Plex Sans'";ctx.fillStyle=muted;ctx.fillText(clip(ctx,g.meta2,W-P*2,"500 28px 'IBM Plex Sans'"),P,H-72);}
+  paint(canvasId);
+}
+function clip(ctx,text,maxW,font){ctx.font=font;if(ctx.measureText(text).width<=maxW)return text;let t=text;while(t.length>1&&ctx.measureText(t+"…").width>maxW)t=t.slice(0,-1);return t+"…";}
+function paint(canvasId){ /* canvas already drawn directly to display canvas */ }
+
+function downloadGraphic(){
+  const disp=document.getElementById("cardDisp");if(!disp)return;
+  try{const a=document.createElement("a");a.href=disp.toDataURL("image/jpeg",0.92);a.download=(currentGraphic.template||"post")+"-1080.jpg";a.click();toast("Graphic downloaded ✓");}
+  catch(e){toast("Export failed — try a different image");}
+}
+
+/* ===== queue ===== */
+function getQueue(){try{return JSON.parse(lsGet("igs2_queue")||"[]");}catch(e){return[];}}
+function setQueue(q){lsSet("igs2_queue",JSON.stringify(q));renderQueue();}
+async function approve(){
+  if(!current)return;
+  const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,date:new Date().toISOString()});setQueue(q);
+  const url=(getSettings().publishUrl||"").trim();
+  if(url.indexOf("http")===0){
+    let img="";const disp=document.getElementById("cardDisp");
+    if(disp){try{img=disp.toDataURL("image/jpeg",0.92).split(",")[1];}catch(e){}}
+    const fullCaption=current.caption+(current.hashtags.length?"\n\n"+current.hashtags.map(h=>"#"+h).join(" "):"");
+    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",consent:true};
+    try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast("Sent to the IG publishing queue ✓");}
+    catch(e){toast("Saved locally — couldn't reach the queue");}
+  } else {
+    toast("Approved ✓  (download the graphic too)");
+  }
+}
+function renderQueue(){
+  const q=getQueue();document.getElementById("qcount").textContent=q.length?`${q.length} post${q.length>1?"s":""}`:"";
+  const list=document.getElementById("qlist");
+  if(!q.length){list.innerHTML=`<div class="qempty">Approved captions land here, ready to pair with the graphic in Meta Business Suite, Buffer, or Later.</div>`;return;}
+  list.innerHTML="";const labels={paper:"Paper",event:"Event",photo:"Photo",repost:"Repost"};
+  q.forEach(item=>{const d=document.createElement("div");d.className="qcard";
+    d.innerHTML=`<div class="top"><span class="pill">${labels[item.type]||item.type}</span><span class="qcount">${new Date(item.date).toLocaleDateString()}</span></div><div class="cap">${esc(item.caption)}</div><div class="qacts"><button class="btn sm" data-a="copy">Copy</button><button class="btn ghost sm" data-a="del">Remove</button></div>`;
+    d.querySelector('[data-a="copy"]').onclick=()=>copy(item.caption+"\n\n"+(item.hashtags||[]).map(h=>"#"+h).join(" "),"Copied");
+    d.querySelector('[data-a="del"]').onclick=()=>setQueue(getQueue().filter(x=>x.id!==item.id));list.appendChild(d);});
+}
+
+/* ===== modals ===== */
+function openKeyModal(){
+  const cur=ssGet("igs2_key")||"";
+  modal(`<h2>Anthropic API key</h2><p>Used to draft captions and graphic text with Claude. Stored only in this browser tab and sent directly to Anthropic.</p>
+    <input type="text" id="keyIn" placeholder="sk-ant-..." value="${esc(cur)}" autocomplete="off">
+    <div class="out-acts" style="margin-top:16px"><button class="btn primary" id="saveKey">Save key</button><button class="btn ghost" id="closeM">Cancel</button></div>
+    <div class="note">Get one at console.anthropic.com → API keys. Sonnet is the default — plenty for this and inexpensive.</div>`);
+  document.getElementById("saveKey").onclick=()=>{const x=val("keyIn");if(x){ssSet("igs2_key",x);toast("Key saved ✓");}closeModal();};
+  document.getElementById("closeM").onclick=closeModal;setTimeout(()=>document.getElementById("keyIn").focus(),50);
+}
+function openSettings(){
+  const s=getSettings();
+  modal(`<h2>Voice &amp; brand</h2><p>Set once — shapes every caption and graphic.</p>
+    <label class="fld"><span class="lab">Department name</span><input type="text" id="setDept" value="${esc(s.dept)}"></label>
+    <label class="fld"><span class="lab">Instagram handle</span><input type="text" id="setHandle" value="${esc(s.handle)}"></label>
+    <label class="fld"><span class="lab">Voice / tone</span><textarea id="setVoice">${esc(s.voice)}</textarea></label>
+    <label class="fld"><span class="lab">Default hashtag themes</span><input type="text" id="setTags" value="${esc(s.hashtags)}"></label>
+    <div class="row">
+      <label class="fld"><span class="lab">Default theme</span><select id="setTheme"><option value="dark"${s.theme==="dark"?" selected":""}>Dark</option><option value="light"${s.theme==="light"?" selected":""}>Light</option></select></label>
+      <label class="fld"><span class="lab">Brand accent</span><input type="color" id="setAccent" value="${s.accent}"></label>
+    </div>
+    <label class="fld"><span class="lab">Publishing queue URL <span class="hint">(optional — your Apps Script Web App; lets "Approve" send straight to the IG queue)</span></span><input type="text" id="setPublish" value="${esc(s.publishUrl||"")}" placeholder="https://script.google.com/macros/s/.../exec"></label>
+    <div class="row hide">
+    </div>
+    <div class="row">
+      <label class="fld"><span class="lab">Caption length</span><select id="setLen"><option value="short"${s.length==="short"?" selected":""}>Short</option><option value="medium"${s.length==="medium"?" selected":""}>Medium</option><option value="long"${s.length==="long"?" selected":""}>Long</option></select></label>
+      <label class="fld"><span class="lab">Model</span><select id="setModel"><option value="claude-sonnet-4-6"${s.model==="claude-sonnet-4-6"?" selected":""}>Sonnet</option><option value="claude-opus-4-8"${s.model==="claude-opus-4-8"?" selected":""}>Opus</option><option value="claude-haiku-4-5-20251001"${(s.model||"").indexOf("haiku")>-1?" selected":""}>Haiku</option></select></label>
+    </div>
+    <div class="out-acts" style="margin-top:8px"><button class="btn primary" id="saveSet">Save</button><button class="btn ghost" id="closeM2">Cancel</button></div>`);
+  document.getElementById("saveSet").onclick=()=>{saveSettings({dept:val("setDept"),handle:val("setHandle"),voice:val("setVoice"),hashtags:val("setTags"),theme:val("setTheme"),accent:val("setAccent"),length:val("setLen"),model:val("setModel"),logo:s.logo,publishUrl:val("setPublish")});toast("Saved ✓");closeModal();};
+  document.getElementById("closeM2").onclick=closeModal;
+}
+function modal(html){const s=document.createElement("div");s.className="scrim";s.id="scrim";s.innerHTML=`<div class="modal">${html}</div>`;s.onclick=e=>{if(e.target===s)closeModal();};document.body.appendChild(s);}
+function closeModal(){const s=document.getElementById("scrim");if(s)s.remove();}
+
+/* ===== utils ===== */
+function val(id){const e=document.getElementById(id);return e?(e.value||"").trim():"";}
+function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function copy(t,m){navigator.clipboard.writeText(t).then(()=>toast(m)).catch(()=>toast("Copy failed"));}
+let toastTimer;function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),2400);}
+
+/* ===== init ===== */
+document.getElementById("draftBtn").onclick=draft;
+document.getElementById("keyBtn").onclick=openKeyModal;
+document.getElementById("settingsBtn").onclick=openSettings;
+renderTypes();renderForm();renderQueue();applyBranding();ensureFonts();
+if(!ssGet("igs2_key"))setTimeout(openKeyModal,400);
+</script>
+</body>
+</html>
