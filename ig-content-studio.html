@@ -265,7 +265,7 @@ function renderForm(){
       <div class="err" style="background:var(--paper);border-color:var(--line);color:var(--slate)">Tip: get the person's OK before reposting, and credit them.</div>`;
     wireFigure();
   } else if(activeType==="reel"){
-    a.innerHTML=`<label class="fld"><span class="lab">Google Drive video link <span class="hint">— MP4 under 60 MB; set to "anyone with the link"</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/file/d/..."></label>
+    a.innerHTML=`<label class="fld"><span class="lab">Google Drive video link <span class="hint">— MP4 or MOV under 60 MB; set to "anyone with the link"</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/file/d/..."></label>
       <div class="drop" id="reelDrop">Tap to add the clip — used only to grab a cover frame &amp; help write the caption<br><span style="font-size:12px">Stays on your device; not uploaded anywhere</span></div>
       <input type="file" id="reelFile" accept="video/*" class="hide">
       <div class="thumbs" id="reelThumb"></div>
@@ -362,7 +362,7 @@ function buildBrief(){
   }
   if(activeType==="reel"){
     const note=val("reelNote"); reelVideoLink=extractDriveFileId(val("reelLink"));
-    if(!reelVideoLink)return{error:"Add a valid Google Drive video link. The Make Reel route downloads the MP4 from Drive."};
+    if(!reelVideoLink)return{error:"Add a valid Google Drive video link. The Make Reel route downloads the MP4 or MOV file from Drive."};
     let b="CONTENT TYPE: Instagram Reel (short vertical video). Write a Reel-style caption with a strong first-line hook"+(reelCover?" for the attached cover frame.":".")+"\n";
     if(note)b+=`What happens: ${note}\n`;
     return{brief:b,withImage:!!reelCover,meta1:getSettings().handle,meta2:"",eyebrow:"Reel"};
