@@ -207,6 +207,12 @@ function ssGet(k){try{return sessionStorage.getItem(k);}catch(e){return mem[k]??
 function ssSet(k,v){try{sessionStorage.setItem(k,v);}catch(e){mem[k]=v;}}
 function lsGet(k){try{return localStorage.getItem(k);}catch(e){return mem[k]??null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
+function getManagerToken(){return lsGet("igs2_manager_token")||ssGet("igs2_manager_token")||"";}
+function setManagerToken(token,remember){
+  if(remember){lsSet("igs2_manager_token",token);ssSet("igs2_manager_token","");}
+  else{ssSet("igs2_manager_token",token);lsSet("igs2_manager_token","");}
+}
+function forgetManagerToken(){ssSet("igs2_manager_token","");lsSet("igs2_manager_token","");}
 
 /* ===== settings ===== */
 const DEFAULTS={
@@ -690,15 +696,15 @@ function renderQueue(){
 function openReviewQueue(){
   const url=(getSettings().publishUrl||"").trim();
   if(url.indexOf("http")!==0){toast("Add the publishing queue URL under Voice & brand first");return;}
-  if(!ssGet("igs2_manager_token")){openReviewAuth();return;}
+  if(!getManagerToken()){openReviewAuth();return;}
   modal(`<h2>Department submission review</h2><p>Only public-form rows marked <b>New</b> or <b>Reviewing</b> appear here.</p><div id="reviewState" class="qempty">Loading submissions…</div><div class="review-grid" id="reviewGrid"></div><div class="out-acts"><button class="btn ghost" id="forgetReviewToken">Forget manager token</button><button class="btn" id="closeReview">Close</button></div>`,true);
   document.getElementById("closeReview").onclick=closeModal;
-  document.getElementById("forgetReviewToken").onclick=()=>{ssSet("igs2_manager_token","");closeModal();toast("Manager token removed");};
+  document.getElementById("forgetReviewToken").onclick=()=>{forgetManagerToken();closeModal();toast("Manager token removed");};
   refreshReviewQueue();
 }
 function openReviewAuth(){
-  modal(`<h2>Connect the private review queue</h2><p>Paste the manager token printed when you ran <code>initializeWorkflow()</code> in Apps Script. It is stored only for this browser tab.</p><label class="fld"><span class="lab">Manager token</span><input type="text" id="reviewToken" autocomplete="off"></label><div class="out-acts"><button class="btn primary" id="saveReviewToken">Connect</button><button class="btn ghost" id="cancelReview">Cancel</button></div>`);
-  document.getElementById("saveReviewToken").onclick=()=>{const token=val("reviewToken");if(!token)return;ssSet("igs2_manager_token",token);closeModal();openReviewQueue();};
+  modal(`<h2>Connect the private review queue</h2><p>Paste the manager token printed when you ran <code>initializeWorkflow()</code> in Apps Script.</p><label class="fld"><span class="lab">Manager token</span><input type="password" id="reviewToken" autocomplete="off"></label><label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;cursor:pointer"><input type="checkbox" id="rememberReviewToken" checked style="margin-top:3px"><span><b>Remember on this browser</b><br><span class="hint">Recommended only on your private computer. Uncheck this on a shared device.</span></span></label><div class="out-acts"><button class="btn primary" id="saveReviewToken">Connect</button><button class="btn ghost" id="cancelReview">Cancel</button></div>`);
+  document.getElementById("saveReviewToken").onclick=()=>{const token=val("reviewToken");if(!token)return;setManagerToken(token,document.getElementById("rememberReviewToken").checked);closeModal();openReviewQueue();};
   document.getElementById("cancelReview").onclick=closeModal;
 }
 async function refreshReviewQueue(){
@@ -726,13 +732,13 @@ function queueJsonp(action,params){
     const timer=setTimeout(()=>finish(new Error("The review queue did not respond.")),15000);
     const finish=(err,data)=>{clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
     window[cb]=data=>finish(null,data);
-    const q=new URLSearchParams({action,token:ssGet("igs2_manager_token")||"",callback:cb,...params});
+    const q=new URLSearchParams({action,token:getManagerToken(),callback:cb,...params});
     script.onerror=()=>finish(new Error("Could not reach the review queue."));script.src=base+"?"+q.toString();document.head.appendChild(script);
   });
 }
 async function reviewStatus(submissionId,status){
   try{
-    await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:ssGet("igs2_manager_token")||"",submissionId,status})});
+    await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status})});
     setTimeout(refreshReviewQueue,500);toast(`Marked ${status.toLowerCase()} ✓`);
   }catch(e){toast("Could not update that submission");}
 }
