@@ -93,7 +93,7 @@
       <div class="preview" id="preview"><img id="previewImg" alt=""><br><button id="removeImg" type="button">Remove</button></div>
     </label>
 
-    <label class="fld"><span class="lab">Video or large file? <span class="hint">paste a share link (Google Drive / Dropbox), not the file</span></span><input type="text" id="videoLink" placeholder="https://drive.google.com/..."></label>
+    <label class="fld"><span class="lab">Reel or large video? <span class="hint">paste a Google Drive MP4 link; under 60 MB; set to "anyone with the link"</span></span><input type="text" id="videoLink" placeholder="https://drive.google.com/file/d/..."></label>
 
     <label class="fld" style="margin-bottom:18px"><span class="consent"><input type="checkbox" id="consent"><span>I have the right to share this, and I'm OK with it being posted publicly to @ur.cheme. Anyone shown in a photo has agreed to appear.</span></span></label>
 
@@ -151,6 +151,14 @@ function readImg(f){
 document.getElementById("removeImg").onclick=()=>{imageData=null;document.getElementById("preview").style.display="none";drop.textContent="Tap to add a photo";};
 
 function val(id){const e=document.getElementById(id);return e?(e.value||"").trim():"";}
+function extractDriveFileId(input){
+  const s=String(input||"").trim();
+  if(/^[A-Za-z0-9_-]{20,}$/.test(s))return s;
+  const path=s.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/);
+  if(path)return path[1];
+  const query=s.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+  return query?query[1]:"";
+}
 function showErr(m){document.getElementById("formErr").innerHTML=`<div class="err">${m}</div>`;}
 
 document.getElementById("submitBtn").onclick=async function(){
@@ -159,12 +167,14 @@ document.getElementById("submitBtn").onclick=async function(){
   if(!val("title")) return showErr("Please add a title or short description.");
   if(!document.getElementById("consent").checked) return showErr("Please confirm you're OK with this being posted.");
   if(WEBAPP_URL.indexOf("PASTE_")===0) return showErr("This form isn't connected yet — the account manager needs to add the submission link (see SETUP.md).");
+  const videoFileId=extractDriveFileId(val("videoLink"));
+  if(activeType==="Video"&&!videoFileId) return showErr("For a Reel, add a valid Google Drive MP4 link and set it to anyone with the link.");
 
   const btn=this; btn.disabled=true; btn.textContent="Sending…";
   const payload={
     submitter:val("submitter"), credit:val("credit"), type:activeType, title:val("title"),
     details:val("details"), date:val("evDate"), time:val("evTime"), location:val("evLoc"),
-    link:val("link"), videoLink:val("videoLink"),
+    link:val("link"), videoLink:videoFileId||val("videoLink"),
     imageBase64:imageData||"", imageType, imageName, consent:true
   };
   try{

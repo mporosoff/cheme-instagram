@@ -30,6 +30,7 @@ function doPost(e) {
   try {
     var d = JSON.parse(e.postData.contents);
     var isStudio = (d.source === "studio");
+    var videoLink = normalizeDriveFileId_(d.videoLink || "");
 
     var mediaUrl = "", fileId = "";
     if (d.imageBase64) {
@@ -61,7 +62,7 @@ function doPost(e) {
       d.caption || "",                 // the text Make actually posts
       mediaUrl,
       fileId,
-      d.videoLink || "",
+      videoLink,
       isStudio ? "Ready" : "New"        // studio approvals are post-ready; form items wait for review
     ]);
 
@@ -78,6 +79,14 @@ function doGet() {
 function getFolder_(name) {
   var it = DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : DriveApp.createFolder(name);
+}
+function normalizeDriveFileId_(input) {
+  var s = String(input || "").trim();
+  if (/^[A-Za-z0-9_-]{20,}$/.test(s)) return s;
+  var path = s.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/);
+  if (path) return path[1];
+  var query = s.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+  return query ? query[1] : s;
 }
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
