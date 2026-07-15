@@ -126,6 +126,15 @@
   .modal h2{margin:0 0 6px;font-size:19px;}
   .modal p{color:var(--ink-soft);font-size:13.5px;margin:0 0 16px;}
   .modal .note{font-size:12px;color:var(--slate);margin-top:12px;line-height:1.5;}
+  .modal.wide{max-width:900px;}
+  .review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:14px;}
+  .review-card{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--paper);}
+  .review-card h3{font-size:15px;margin:7px 0 4px;line-height:1.3;}
+  .review-card .meta{font-size:12px;color:var(--slate);}
+  .review-card .desc{font-size:13px;color:var(--ink-soft);margin-top:8px;max-height:64px;overflow:hidden;}
+  .review-card .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .loaded-review{border-left:4px solid var(--glow);display:flex;justify-content:space-between;gap:12px;align-items:start;}
+  .loaded-review button{color:var(--slate);font-size:12px;}
 
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:9px;font-size:13.5px;opacity:0;pointer-events:none;transition:.22s;z-index:60;box-shadow:var(--shadow);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -153,6 +162,7 @@
     <div style="min-width:0"><h1>Dept IG Content Studio</h1><div class="sub" id="brandSub">Source → caption + graphic → approve</div></div>
   </div>
   <div class="acts">
+    <button class="btn ghost sm" id="reviewBtn">Review queue</button>
     <button class="btn ghost sm" id="settingsBtn">Voice &amp; brand</button>
     <button class="btn ghost sm" id="keyBtn">API key</button>
   </div>
@@ -183,7 +193,7 @@
 </main>
 
 <div class="queue-wrap">
-  <div class="queue-head"><h2>Approved &amp; ready to schedule</h2><span class="qcount" id="qcount"></span></div>
+  <div class="queue-head"><h2>This browser's recent approvals</h2><span class="qcount" id="qcount"></span></div>
   <div class="qlist" id="qlist"></div>
 </div>
 
@@ -219,7 +229,7 @@ const TYPES=[
   {id:"repost",label:"Repost",icon:'<path d="M4 9V7a3 3 0 0 1 3-3h9l-2-2m2 2-2 2M20 15v2a3 3 0 0 1-3 3H8l2 2m-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'},
   {id:"reel",label:"Reel",icon:'<rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h18M8 4l2.5 4M13 4l2.5 4" stroke="currentColor" stroke-width="1.6"/><path d="M10 12.5v3l3-1.5z" fill="currentColor"/>'}
 ];
-let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="";
+let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="", reviewSource=null;
 
 function renderTypes(){
   const c=document.getElementById("types");c.innerHTML="";
@@ -277,6 +287,15 @@ function renderForm(){
     drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";handleReel(e.dataTransfer.files[0]);};
     fi.onchange=e=>handleReel(e.target.files[0]); renderReelThumb();
   }
+  renderLoadedReviewBanner();
+}
+function renderLoadedReviewBanner(){
+  if(!reviewSource)return;
+  const a=document.getElementById("formArea");if(!a)return;
+  const box=document.createElement("div");box.className="meta-card loaded-review";
+  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ID ${esc(reviewSource.submissionId||"")}</div></div><button type="button">Clear</button>`;
+  box.querySelector("button").onclick=()=>{reviewSource=null;renderForm();};
+  a.prepend(box);
 }
 function handleReel(f){
   if(!f||!f.type.startsWith("video/"))return;
@@ -394,6 +413,9 @@ async function draft(){
   const key=ssGet("igs2_key"); if(!key){openKeyModal();return;}
   const built=buildBrief(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
   if(built.error){errBox.innerHTML=`<div class="err">${built.error}</div>`;return;}
+  if(reviewSource){
+    built.brief+=`\nORIGINAL DEPARTMENT SUBMISSION:\nSubmitter: ${reviewSource.submitter||""}\nCredit: ${reviewSource.credit||""}\nTitle: ${reviewSource.title||""}\nDetails: ${reviewSource.details||""}\nLink: ${reviewSource.link||""}\n`;
+  }
   lastBuilt=built;
   const s=getSettings();
   const sys=`You are the social-media editor for ${s.dept}${s.handle?` (Instagram ${s.handle})`:""}, a university engineering department.
@@ -646,8 +668,8 @@ async function approve(){
     let img="";const disp=document.getElementById("cardDisp");
     if(disp){try{img=disp.toDataURL("image/jpeg",0.92).split(",")[1];}catch(e){}}
     const fullCaption=current.caption+(current.hashtags.length?"\n\n"+current.hashtags.map(h=>"#"+h).join(" "):"");
-    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",consent:true};
-    try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast("Sent to the IG publishing queue ✓");}
+    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",sourceSubmissionId:reviewSource?reviewSource.submissionId:"",consent:true};
+    try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast(reviewSource?"Approved and marked reviewed ✓":"Sent to the IG publishing queue ✓");}
     catch(e){toast("Saved locally — couldn't reach the queue");}
   } else {
     toast("Approved ✓  (download the graphic too)");
@@ -656,13 +678,93 @@ async function approve(){
 function renderQueue(){
   const q=getQueue();document.getElementById("qcount").textContent=q.length?`${q.length} post${q.length>1?"s":""}`:"";
   const list=document.getElementById("qlist");
-  if(!q.length){list.innerHTML=`<div class="qempty">Approved captions land here, ready to pair with the graphic in Meta Business Suite, Buffer, or Later.</div>`;return;}
+  if(!q.length){list.innerHTML=`<div class="qempty">A local history appears here after approval. The private Google Sheet remains the authoritative publishing queue.</div>`;return;}
   list.innerHTML="";const labels={paper:"Paper",event:"Event",photo:"Photo",repost:"Repost"};
   q.forEach(item=>{const d=document.createElement("div");d.className="qcard";
     d.innerHTML=`<div class="top"><span class="pill">${labels[item.type]||item.type}</span><span class="qcount">${new Date(item.date).toLocaleDateString()}</span></div><div class="cap">${esc(item.caption)}</div><div class="qacts"><button class="btn sm" data-a="copy">Copy</button><button class="btn ghost sm" data-a="del">Remove</button></div>`;
     d.querySelector('[data-a="copy"]').onclick=()=>copy(item.caption+"\n\n"+(item.hashtags||[]).map(h=>"#"+h).join(" "),"Copied");
     d.querySelector('[data-a="del"]').onclick=()=>setQueue(getQueue().filter(x=>x.id!==item.id));list.appendChild(d);});
 }
+
+/* ===== manager review queue ===== */
+function openReviewQueue(){
+  const url=(getSettings().publishUrl||"").trim();
+  if(url.indexOf("http")!==0){toast("Add the publishing queue URL under Voice & brand first");return;}
+  if(!ssGet("igs2_manager_token")){openReviewAuth();return;}
+  modal(`<h2>Department submission review</h2><p>Only public-form rows marked <b>New</b> or <b>Reviewing</b> appear here.</p><div id="reviewState" class="qempty">Loading submissions…</div><div class="review-grid" id="reviewGrid"></div><div class="out-acts"><button class="btn ghost" id="forgetReviewToken">Forget manager token</button><button class="btn" id="closeReview">Close</button></div>`,true);
+  document.getElementById("closeReview").onclick=closeModal;
+  document.getElementById("forgetReviewToken").onclick=()=>{ssSet("igs2_manager_token","");closeModal();toast("Manager token removed");};
+  refreshReviewQueue();
+}
+function openReviewAuth(){
+  modal(`<h2>Connect the private review queue</h2><p>Paste the manager token printed when you ran <code>initializeWorkflow()</code> in Apps Script. It is stored only for this browser tab.</p><label class="fld"><span class="lab">Manager token</span><input type="text" id="reviewToken" autocomplete="off"></label><div class="out-acts"><button class="btn primary" id="saveReviewToken">Connect</button><button class="btn ghost" id="cancelReview">Cancel</button></div>`);
+  document.getElementById("saveReviewToken").onclick=()=>{const token=val("reviewToken");if(!token)return;ssSet("igs2_manager_token",token);closeModal();openReviewQueue();};
+  document.getElementById("cancelReview").onclick=closeModal;
+}
+async function refreshReviewQueue(){
+  const state=document.getElementById("reviewState"),grid=document.getElementById("reviewGrid");if(!state||!grid)return;
+  state.textContent="Loading submissions…";grid.innerHTML="";
+  try{
+    const data=await queueJsonp("list",{});
+    if(!data.ok)throw new Error(data.error||"Review queue failed");
+    state.textContent=data.items.length?`${data.items.length} submission${data.items.length===1?"":"s"} waiting`:"Nothing is waiting for review.";
+    data.items.forEach(item=>{
+      const card=document.createElement("div");card.className="review-card";
+      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span></div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions"><button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
+      card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId);
+      card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed");
+      card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected");};
+      grid.appendChild(card);
+    });
+  }catch(e){state.innerHTML=`<div class="err">${esc(e.message||e)} If the token was regenerated, choose “Forget manager token” and reconnect.</div>`;}
+}
+function queueJsonp(action,params){
+  const base=(getSettings().publishUrl||"").trim();
+  return new Promise((resolve,reject)=>{
+    const cb="igsReview_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>finish(new Error("The review queue did not respond.")),15000);
+    const finish=(err,data)=>{clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
+    window[cb]=data=>finish(null,data);
+    const q=new URLSearchParams({action,token:ssGet("igs2_manager_token")||"",callback:cb,...params});
+    script.onerror=()=>finish(new Error("Could not reach the review queue."));script.src=base+"?"+q.toString();document.head.appendChild(script);
+  });
+}
+async function reviewStatus(submissionId,status){
+  try{
+    await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:ssGet("igs2_manager_token")||"",submissionId,status})});
+    setTimeout(refreshReviewQueue,500);toast(`Marked ${status.toLowerCase()} ✓`);
+  }catch(e){toast("Could not update that submission");}
+}
+async function loadReviewSubmission(submissionId){
+  const state=document.getElementById("reviewState");if(state)state.textContent="Loading submission and media…";
+  try{
+    await reviewStatus(submissionId,"Reviewing");
+    const data=await queueJsonp("detail",{submissionId});
+    if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
+    applyReviewSubmission(data.item);closeModal();toast("Submission loaded into Studio ✓");
+  }catch(e){if(state)state.innerHTML=`<div class="err">${esc(e.message||e)}</div>`;}
+}
+function applyReviewSubmission(item){
+  reviewSource=item;paperMeta=null;photos=[];figure=null;reelCover=null;reelVideoLink="";
+  const map={Paper:"paper",Event:"event",Photo:"photo",Video:"reel","Shout-out":"repost"};
+  activeType=map[item.type]||"photo";
+  const dataUrl=item.imageBase64?`data:${item.imageType||"image/jpeg"};base64,${item.imageBase64}`:"";
+  if(dataUrl){
+    if(activeType==="photo")photos=[{dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"}];
+    else if(activeType==="reel")reelCover=dataUrl;
+    else figure={dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"};
+  }
+  renderTypes();renderForm();
+  const context=[item.title,item.details].filter(Boolean).join("\n\n");
+  if(activeType==="paper"){setField("doi",item.link);setField("paperText",context);setField("paperAngle",item.credit);}
+  if(activeType==="event"){setField("evTitle",item.title);setField("evDate",item.date);setField("evTime",item.time);setField("evLoc",item.location);setField("evDesc",item.details);setField("evLink",item.link);}
+  if(activeType==="photo")setField("photoNote",context);
+  if(activeType==="reel"){setField("reelLink",item.videoLink);setField("reelNote",context);reelVideoLink=item.videoLink||"";}
+  if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy","Submitted by "+(item.submitter||"department member"));}
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function setField(id,value){const el=document.getElementById(id);if(el)el.value=value||"";}
 
 /* ===== modals ===== */
 function openKeyModal(){
@@ -696,7 +798,7 @@ function openSettings(){
   document.getElementById("saveSet").onclick=()=>{saveSettings({dept:val("setDept"),handle:val("setHandle"),voice:val("setVoice"),hashtags:val("setTags"),theme:val("setTheme"),accent:val("setAccent"),length:val("setLen"),model:val("setModel"),logo:s.logo,publishUrl:val("setPublish")});toast("Saved ✓");closeModal();};
   document.getElementById("closeM2").onclick=closeModal;
 }
-function modal(html){const s=document.createElement("div");s.className="scrim";s.id="scrim";s.innerHTML=`<div class="modal">${html}</div>`;s.onclick=e=>{if(e.target===s)closeModal();};document.body.appendChild(s);}
+function modal(html,wide=false){const s=document.createElement("div");s.className="scrim";s.id="scrim";s.innerHTML=`<div class="modal${wide?" wide":""}">${html}</div>`;s.onclick=e=>{if(e.target===s)closeModal();};document.body.appendChild(s);}
 function closeModal(){const s=document.getElementById("scrim");if(s)s.remove();}
 
 /* ===== utils ===== */
@@ -715,6 +817,7 @@ let toastTimer;function toast(m){const t=document.getElementById("toast");t.text
 
 /* ===== init ===== */
 document.getElementById("draftBtn").onclick=draft;
+document.getElementById("reviewBtn").onclick=openReviewQueue;
 document.getElementById("keyBtn").onclick=openKeyModal;
 document.getElementById("settingsBtn").onclick=openSettings;
 renderTypes();renderForm();renderQueue();applyBranding();ensureFonts();

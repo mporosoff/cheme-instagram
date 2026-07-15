@@ -57,6 +57,7 @@
   .done button{background:none;border:1px solid var(--line-strong);border-radius:9px;padding:10px 18px;font:inherit;font-weight:500;cursor:pointer;}
   .err{background:var(--glow-bg);border:1px solid var(--glow-soft);color:#8A2B0C;border-radius:9px;padding:11px 13px;font-size:13.5px;margin-top:12px;}
   .notice{background:#FFF7E8;border:1px solid #E8C97A;color:#7A5A12;border-radius:9px;padding:12px;font-size:13px;margin-bottom:18px;}
+  .website-trap{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important;}
   .foot{text-align:center;color:var(--slate);font-size:12px;margin-top:20px;font-family:"IBM Plex Mono",monospace;}
 </style>
 </head>
@@ -89,13 +90,15 @@
 
     <label class="fld"><span class="lab">Photo <span class="hint">(optional — drag in or tap)</span></span>
       <div class="drop" id="drop">Tap to add a photo</div>
-      <input type="file" id="file" accept="image/*" class="hide">
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" class="hide">
       <div class="preview" id="preview"><img id="previewImg" alt=""><br><button id="removeImg" type="button">Remove</button></div>
     </label>
 
     <label class="fld"><span class="lab">Reel or large video? <span class="hint">paste a Google Drive MP4 or MOV link; under 60 MB; set to "anyone with the link"</span></span><input type="text" id="videoLink" placeholder="https://drive.google.com/file/d/..."></label>
 
     <label class="fld" style="margin-bottom:18px"><span class="consent"><input type="checkbox" id="consent"><span>I have the right to share this, and I'm OK with it being posted publicly to @ur.cheme. Anyone shown in a photo has agreed to appear.</span></span></label>
+
+    <label class="website-trap" aria-hidden="true">Website<input type="text" id="website" tabindex="-1" autocomplete="off"></label>
 
     <button class="submit" id="submitBtn">Send to the queue</button>
     <div id="formErr"></div>
@@ -104,7 +107,7 @@
   <div class="card done hide" id="doneCard">
     <div class="check"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <h2>Sent — thank you!</h2>
-    <p>It's in the queue. Someone managing the account will review it before it posts.</p>
+    <p>It's verified in the queue. Someone managing the account will review it before it posts.<br><span id="doneId" style="font-family:'IBM Plex Mono';font-size:11px"></span></p>
     <button id="anotherBtn">Submit another</button>
   </div>
 
@@ -117,7 +120,7 @@ const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzolNKeTVSiRYK5yX2A3
 /* ============================================================== */
 
 const TYPES = ["Paper","Event","Photo","Video","Shout-out"];
-let activeType = "Paper", imageData = null, imageName = "", imageType = "";
+let activeType = "Paper", imageData = null, imageName = "", imageType = "", pendingSubmissionId = "";
 
 function renderTypes(){
   const c = document.getElementById("types"); c.innerHTML="";
@@ -140,6 +143,7 @@ drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";readImg(e.dataTrans
 file.onchange=e=>readImg(e.target.files[0]);
 function readImg(f){
   if(!f||!f.type.startsWith("image/"))return;
+  if(!/^image\/(jpeg|png|webp)$/.test(f.type)){showErr("Please use a JPEG, PNG, or WebP image.");return;}
   if(f.size>8*1024*1024){ showErr("That image is over 8 MB — please use a smaller one, or share a link instead."); return; }
   const r=new FileReader();
   r.onload=()=>{ imageData=r.result.split(",")[1]; imageType=f.type; imageName=f.name;
@@ -170,22 +174,52 @@ document.getElementById("submitBtn").onclick=async function(){
   const videoFileId=extractDriveFileId(val("videoLink"));
   if(activeType==="Video"&&!videoFileId) return showErr("For a Reel, add a valid Google Drive MP4 or MOV link and set it to anyone with the link.");
 
-  const btn=this; btn.disabled=true; btn.textContent="Sending…";
+  const btn=this; btn.disabled=true; btn.textContent="Sending and verifying…";
+  if(!pendingSubmissionId)pendingSubmissionId=createSubmissionId();
   const payload={
+    submissionId:pendingSubmissionId,
     submitter:val("submitter"), credit:val("credit"), type:activeType, title:val("title"),
     details:val("details"), date:val("evDate"), time:val("evTime"), location:val("evLoc"),
     link:val("link"), videoLink:videoFileId||val("videoLink"),
-    imageBase64:imageData||"", imageType, imageName, consent:true
+    imageBase64:imageData||"", imageType, imageName, website:val("website"), consent:true
   };
   try{
     await fetch(WEBAPP_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
+    const verified=await verifySubmission(pendingSubmissionId);
+    if(!verified)throw new Error("The queue did not confirm this submission.");
     document.getElementById("formCard").classList.add("hide");
     document.getElementById("doneCard").classList.remove("hide");
+    document.getElementById("doneId").textContent="Confirmation: "+pendingSubmissionId;
     window.scrollTo({top:0,behavior:"smooth"});
   }catch(e){
-    showErr("Couldn't send — check your connection and try again."); btn.disabled=false; btn.textContent="Send to the queue";
+    showErr("We couldn't verify that it reached the queue. Check your connection and try again; retries will not create duplicates."); btn.disabled=false; btn.textContent="Check / send again";
   }
 };
+function createSubmissionId(){
+  if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+  return "sub_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,12);
+}
+function verifySubmission(submissionId){
+  return new Promise(async resolve=>{
+    for(let attempt=0;attempt<8;attempt++){
+      if(attempt)await new Promise(r=>setTimeout(r,750));
+      try{const result=await statusJsonp(submissionId);if(result&&result.ok&&result.found){resolve(true);return;}}catch(e){}
+    }
+    resolve(false);
+  });
+}
+function statusJsonp(submissionId){
+  return new Promise((resolve,reject)=>{
+    const cb="igsStatus_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>finish(new Error("timeout")),5000);
+    const finish=(err,data)=>{clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
+    window[cb]=data=>finish(null,data);
+    script.onerror=()=>finish(new Error("unreachable"));
+    script.src=WEBAPP_URL+"?"+new URLSearchParams({action:"status",submissionId,callback:cb}).toString();
+    document.head.appendChild(script);
+  });
+}
 document.getElementById("anotherBtn").onclick=()=>location.reload();
 
 if(WEBAPP_URL.indexOf("PASTE_")===0){
