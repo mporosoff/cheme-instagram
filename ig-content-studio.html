@@ -207,6 +207,12 @@ function ssGet(k){try{return sessionStorage.getItem(k);}catch(e){return mem[k]??
 function ssSet(k,v){try{sessionStorage.setItem(k,v);}catch(e){mem[k]=v;}}
 function lsGet(k){try{return localStorage.getItem(k);}catch(e){return mem[k]??null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
+function getApiKey(){return lsGet("igs2_key")||ssGet("igs2_key")||"";}
+function setApiKey(key,remember){
+  if(remember){lsSet("igs2_key",key);ssSet("igs2_key","");}
+  else{ssSet("igs2_key",key);lsSet("igs2_key","");}
+}
+function forgetApiKey(){ssSet("igs2_key","");lsSet("igs2_key","");}
 function getManagerToken(){return lsGet("igs2_manager_token")||ssGet("igs2_manager_token")||"";}
 function setManagerToken(token,remember){
   if(remember){lsSet("igs2_manager_token",token);ssSet("igs2_manager_token","");}
@@ -416,7 +422,7 @@ function buildBrief(){
 const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
 let lastBuilt=null;
 async function draft(){
-  const key=ssGet("igs2_key"); if(!key){openKeyModal();return;}
+  const key=getApiKey(); if(!key){openKeyModal();return;}
   const built=buildBrief(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
   if(built.error){errBox.innerHTML=`<div class="err">${built.error}</div>`;return;}
   if(reviewSource){
@@ -774,12 +780,14 @@ function setField(id,value){const el=document.getElementById(id);if(el)el.value=
 
 /* ===== modals ===== */
 function openKeyModal(){
-  const cur=ssGet("igs2_key")||"";
-  modal(`<h2>Anthropic API key</h2><p>Used to draft captions and graphic text with Claude. Stored only in this browser tab and sent directly to Anthropic.</p>
-    <input type="text" id="keyIn" placeholder="sk-ant-..." value="${esc(cur)}" autocomplete="off">
-    <div class="out-acts" style="margin-top:16px"><button class="btn primary" id="saveKey">Save key</button><button class="btn ghost" id="closeM">Cancel</button></div>
+  const cur=getApiKey();
+  modal(`<h2>Anthropic API key</h2><p>Used to draft captions and graphic text with Claude and sent directly to Anthropic.</p>
+    <input type="password" id="keyIn" placeholder="sk-ant-..." value="${esc(cur)}" autocomplete="off">
+    <label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;cursor:pointer"><input type="checkbox" id="rememberApiKey" checked style="margin-top:3px"><span><b>Remember on this browser</b><br><span class="hint">Recommended only on your private computer. Uncheck this on a shared device.</span></span></label>
+    <div class="out-acts" style="margin-top:16px"><button class="btn primary" id="saveKey">Save key</button>${cur?'<button class="btn ghost" id="forgetKey">Forget key</button>':''}<button class="btn ghost" id="closeM">Cancel</button></div>
     <div class="note">Get one at console.anthropic.com → API keys. Sonnet is the default — plenty for this and inexpensive.</div>`);
-  document.getElementById("saveKey").onclick=()=>{const x=val("keyIn");if(x){ssSet("igs2_key",x);toast("Key saved ✓");}closeModal();};
+  document.getElementById("saveKey").onclick=()=>{const x=val("keyIn");if(x){setApiKey(x,document.getElementById("rememberApiKey").checked);toast("Key saved ✓");}closeModal();};
+  if(document.getElementById("forgetKey"))document.getElementById("forgetKey").onclick=()=>{forgetApiKey();closeModal();toast("API key removed");};
   document.getElementById("closeM").onclick=closeModal;setTimeout(()=>document.getElementById("keyIn").focus(),50);
 }
 function openSettings(){
@@ -827,7 +835,7 @@ document.getElementById("reviewBtn").onclick=openReviewQueue;
 document.getElementById("keyBtn").onclick=openKeyModal;
 document.getElementById("settingsBtn").onclick=openSettings;
 renderTypes();renderForm();renderQueue();applyBranding();ensureFonts();
-if(!ssGet("igs2_key"))setTimeout(openKeyModal,400);
+if(!getApiKey())setTimeout(openKeyModal,400);
 </script>
 </body>
 </html>
