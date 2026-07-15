@@ -64,22 +64,43 @@ Yes, GitHub is the right home — same as your applets. The studio has no secret
 
 **Do these account steps first (only you can):**
 
-- In the Instagram app, set **@ur.cheme** to a **Business or Creator** account, and **link it to a Facebook Page**. This is Meta's hard requirement for *any* posting automation — there's no way around it.
-- Create a free account at **make.com**.
+- In the Instagram app, set **@ur.cheme** to a **Business** account. The Make module used below does not support Creator accounts.
+- Create or select a real Facebook **Page** (not a Facebook profile), link @ur.cheme under the Page's **Settings ▸ Permissions ▸ Linked accounts**, and make sure the Facebook login used in Make has access to that Page.
+- Create free accounts at **make.com** and **cloudinary.com**. Cloudinary supplies the public JPEG URL that Instagram's API requires.
 
 **Build the scenario:**
 
 1. In Make, click **Create a new scenario**.
-2. Add the first module: search **Google Sheets**, choose **Watch New Rows**. Connect your Google account, pick your sheet and the `Posts` tab, say the table has headers. Save.
-3. Add a **Filter** between modules (the wrench on the connector): condition = `Status` **Equal to** `Ready`. Only approved posts pass.
-4. Add a module: **Google Drive ▸ Download a File**, using the `MediaFileId` from the row. (Feeding Make the Drive file is more reliable than a link.)
-5. Add a module: **Instagram for Business ▸ Create a Photo Post**. Connect via Facebook login and pick @ur.cheme. Map:
-   - **Caption** → the `Caption` column
-   - **Photo** → the file from step 4
-6. (Recommended) Add a final module: **Google Sheets ▸ Update a Row**, set `Status` to `Posted` so nothing posts twice.
-7. Click **Run once** to test with one Ready row. If it posts, set the schedule (bottom-left clock — e.g. every 15 minutes) and toggle the scenario **ON**.
+2. Add **Google Sheets ▸ Watch New Rows**. Connect your Google account and configure:
+   - Spreadsheet: **UR ChemE IG**
+   - Sheet: **Posts**
+   - Table contains headers: **Yes**
+   - Header row: **A1:O1**
+3. Add a filter between Google Sheets and the next module with both conditions:
+   - `Status (O)` **Equal to** `Ready`
+   - `Type (D)` **Does not equal to** `Video`
+   The second condition prevents a Reel cover from being posted accidentally as a normal photo.
+4. Add **Google Drive ▸ Download a File**. Map **File ID** to `MediaFileId (M)` from Watch New Rows.
+5. Add **Cloudinary ▸ Upload a Resource**. Connect with the Cloud name, API key, and API secret from your Cloudinary dashboard, then configure:
+   - File type: **Base64 Encoded Data URI**
+   - File: **Google Drive ▸ Download a File**
+   - MIME type: `image/jpeg`
+   - Resource type: `image`
+   - Upload preset and Public ID: leave blank
+6. Add **Instagram for Business (Facebook login) ▸ Create a Photo Post**. Select the Facebook Page linked to @ur.cheme, then map:
+   - **Photo URL** → Cloudinary's **Secure URL** only
+   - **Caption** → `Caption (K)` from Watch New Rows
+7. Add **Google Sheets ▸ Update a Row**. Map **Row number** from Watch New Rows, map columns A–N back to their matching source values, and type `Posted` in `Status (O)`.
+8. Save the scenario. Create one clearly labeled test post in the Studio and approve it. Confirm the Sheet row contains `Ready`, a caption, and a `MediaFileId`; then click **Run once** in Make. A successful run publishes the post and changes its Sheet status to `Posted`.
+9. Delete the temporary Instagram test post, set the schedule (for example, every 15 minutes), and turn the scenario **ON**.
 
-> **For Reels/video:** add a second branch (or a `Type = Video` filter) that uses **Instagram for Business ▸ Create a Reel** instead. Map the **video** to the `VideoLink` and, optionally, the **cover** to the `MediaURL` (the 9:16 cover the studio made). One honest catch: Instagram fetches the video from a URL, so the link must point *directly* at the file and be publicly reachable. A normal Google Drive "share" link often isn't — the most reliable route is to drop the clip in your own Drive folder and let Make's **Google Drive ▸ Download a File** module hand the video to the Reel module. Photos are easy; Reels are the fiddly one.
+> **For Reels/video:** the photo scenario deliberately excludes `Type = Video`. Do not remove that filter until a separate Reel route has been built and tested with a publicly reachable video URL. Normal Google Drive share links do not satisfy Instagram's URL requirement.
+
+### Make troubleshooting
+
+- **No Page appears in the Instagram module:** confirm that you created a Facebook Page rather than a profile, linked @ur.cheme to it, and authorized Make with a Facebook login that can access the Page. Refresh or recreate the Make connection after linking.
+- **Invalid Photo URL:** the Photo URL field must contain only Cloudinary's `Secure URL`. Put the Sheet's `Caption (K)` token in the Caption field.
+- **Google Drive URL rejected:** expected. Instagram cannot fetch Google Drive files even when sharing is public; keep the Cloudinary upload step in the route.
 
 ---
 
@@ -89,6 +110,8 @@ Yes, GitHub is the right home — same as your applets. The studio has no secret
 2. Tweak the caption and the graphic.
 3. Download the graphic isn't required anymore — just hit **Approve**. It lands in the Sheet as **Ready** with the image attached.
 4. Make posts it on the next cycle. Done.
+
+The Studio exports Photo templates as a 1080×1350 JPEG (4:5), with text kept inside a centered safe area so Instagram's feed and profile-grid previews are less likely to need manual adjustment. Paper, event, and quote templates remain square; Reel covers remain 9:16.
 
 Colleagues' submissions show up in the Sheet as **New** rows — raw material. To turn one into a post, recreate it in the studio and approve it; that writes a clean **Ready** row. (The New rows never post on their own.)
 
