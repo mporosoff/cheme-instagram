@@ -265,7 +265,7 @@ function renderForm(){
       <div class="err" style="background:var(--paper);border-color:var(--line);color:var(--slate)">Tip: get the person's OK before reposting, and credit them.</div>`;
     wireFigure();
   } else if(activeType==="reel"){
-    a.innerHTML=`<label class="fld"><span class="lab">Video link <span class="hint">— what actually gets posted (Drive/Dropbox, set to "anyone with link")</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/..."></label>
+    a.innerHTML=`<label class="fld"><span class="lab">Google Drive video link <span class="hint">— MP4 under 60 MB; set to "anyone with the link"</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/file/d/..."></label>
       <div class="drop" id="reelDrop">Tap to add the clip — used only to grab a cover frame &amp; help write the caption<br><span style="font-size:12px">Stays on your device; not uploaded anywhere</span></div>
       <input type="file" id="reelFile" accept="video/*" class="hide">
       <div class="thumbs" id="reelThumb"></div>
@@ -361,8 +361,8 @@ function buildBrief(){
     return{brief:b,meta1:[dstr,time].filter(Boolean).join(" · "),meta2:loc,eyebrow:"Event",headlineHint:title};
   }
   if(activeType==="reel"){
-    const note=val("reelNote"); reelVideoLink=val("reelLink");
-    if(!note && !reelCover && !reelVideoLink)return{error:"Add the video link, a clip, or a note about the Reel."};
+    const note=val("reelNote"); reelVideoLink=extractDriveFileId(val("reelLink"));
+    if(!reelVideoLink)return{error:"Add a valid Google Drive video link. The Make Reel route downloads the MP4 from Drive."};
     let b="CONTENT TYPE: Instagram Reel (short vertical video). Write a Reel-style caption with a strong first-line hook"+(reelCover?" for the attached cover frame.":".")+"\n";
     if(note)b+=`What happens: ${note}\n`;
     return{brief:b,withImage:!!reelCover,meta1:getSettings().handle,meta2:"",eyebrow:"Reel"};
@@ -651,6 +651,14 @@ function closeModal(){const s=document.getElementById("scrim");if(s)s.remove();}
 
 /* ===== utils ===== */
 function val(id){const e=document.getElementById(id);return e?(e.value||"").trim():"";}
+function extractDriveFileId(input){
+  const s=String(input||"").trim();
+  if(/^[A-Za-z0-9_-]{20,}$/.test(s))return s;
+  const path=s.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/);
+  if(path)return path[1];
+  const query=s.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+  return query?query[1]:"";
+}
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function copy(t,m){navigator.clipboard.writeText(t).then(()=>toast(m)).catch(()=>toast("Copy failed"));}
 let toastTimer;function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),2400);}

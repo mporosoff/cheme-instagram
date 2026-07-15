@@ -94,13 +94,38 @@ Yes, GitHub is the right home — same as your applets. The studio has no secret
 8. Save the scenario. Create one clearly labeled test post in the Studio and approve it. Confirm the Sheet row contains `Ready`, a caption, and a `MediaFileId`; then click **Run once** in Make. A successful run publishes the post and changes its Sheet status to `Posted`.
 9. Delete the temporary Instagram test post, set the schedule (for example, every 15 minutes), and turn the scenario **ON**.
 
-> **For Reels/video:** the photo scenario deliberately excludes `Type = Video`. Do not remove that filter until a separate Reel route has been built and tested with a publicly reachable video URL. Normal Google Drive share links do not satisfy Instagram's URL requirement.
+### Build the Reel scenario
+
+Keep the working Photo scenario unchanged. Duplicate it, rename the copy **UR ChemE — Reels**, and configure the copy as follows:
+
+1. Keep **Google Sheets ▸ Watch New Rows** pointed at the same `Posts` sheet and header row `A1:O1`.
+2. Replace the filter conditions with:
+   - `Status (O)` **Equal to** `Ready`
+   - `Type (D)` **Equal to** `Video`
+3. In **Google Drive ▸ Download a File**, map **File ID** to `VideoLink (N)`. The Studio and Apps Script convert the pasted Drive sharing URL into the file ID Make needs.
+4. In **Cloudinary ▸ Upload a Resource**, configure:
+   - File type: **Base64 Encoded Data URI**
+   - File: **Google Drive ▸ Download a File**
+   - MIME type: `video/mp4`
+   - Resource type: `video`
+   - Upload preset and Public ID: leave blank
+5. Replace the Instagram photo module with **Instagram for Business (Facebook login) ▸ Create a Reel Post**. Select the same Facebook Page and map:
+   - **Video URL** → Cloudinary's **Secure URL** only
+   - **Caption** → `Caption (K)` from Watch New Rows
+   - **Share to feed** → `Yes`
+   If Make offers a thumbnail time/offset, leave it at the default for the first test. The Studio's generated 9:16 cover remains available for a later custom-cover enhancement.
+6. Keep **Google Sheets ▸ Update a Row** configured with the original row number, columns A–N mapped back to themselves, and `Posted` in `Status (O)`.
+7. When Make asks where Watch New Rows should start, choose the current/latest row so old Video rows are not published. Save the scenario but leave it **OFF** until the private Reel test is ready.
+
+For this first reliable route, use an MP4 stored in Google Drive, shared as **Anyone with the link**, and kept under approximately 60 MB. The Make/Cloudinary Base64 transfer is the limiting step even though Instagram itself accepts larger files.
 
 ### Make troubleshooting
 
 - **No Page appears in the Instagram module:** confirm that you created a Facebook Page rather than a profile, linked @ur.cheme to it, and authorized Make with a Facebook login that can access the Page. Refresh or recreate the Make connection after linking.
 - **Invalid Photo URL:** the Photo URL field must contain only Cloudinary's `Secure URL`. Put the Sheet's `Caption (K)` token in the Caption field.
 - **Google Drive URL rejected:** expected. Instagram cannot fetch Google Drive files even when sharing is public; keep the Cloudinary upload step in the route.
+- **Reel file not found:** confirm that column N contains a Drive file ID, that the original Drive file is still available, and that it is shared with the Google account used by Make or with anyone who has the link.
+- **Cloudinary rejects a Reel:** confirm the resource type is `video`, the MIME type is `video/mp4`, and the MP4 is under approximately 60 MB.
 
 ---
 
@@ -115,7 +140,7 @@ The Studio exports Photo templates as a 1080×1350 JPEG (4:5), with text kept in
 
 Colleagues' submissions show up in the Sheet as **New** rows — raw material. To turn one into a post, recreate it in the studio and approve it; that writes a clean **Ready** row. (The New rows never post on their own.)
 
-**Reels:** in the studio pick the **Reel** type, paste the video link (what gets posted), and optionally drop in the clip — the studio grabs a cover frame, writes Reel-style copy against it, and builds a 9:16 cover. Approve sends the caption, cover, and video link to the queue as a `Video` row.
+**Reels:** upload an MP4 under approximately 60 MB to Google Drive and set it to **Anyone with the link**. In the Studio choose **Reel**, paste that Drive link, and optionally drop the same clip into the browser so the Studio can grab a cover frame and use it while drafting. The local clip is not uploaded by the browser. Approve sends the caption, generated 9:16 cover, and normalized Drive file ID to the queue as a `Video` row; the separate Make Reel scenario downloads and publishes the MP4.
 
 ---
 
