@@ -266,7 +266,7 @@ function renderForm(){
     wireFigure();
   } else if(activeType==="reel"){
     a.innerHTML=`<label class="fld"><span class="lab">Google Drive video link <span class="hint">— MP4 or MOV under 60 MB; set to "anyone with the link"</span></span><input type="text" id="reelLink" placeholder="https://drive.google.com/file/d/..."></label>
-      <div class="drop" id="reelDrop">Tap to add the clip — used only to grab a cover frame &amp; help write the caption<br><span style="font-size:12px">Stays on your device; not uploaded anywhere</span></div>
+      <div class="drop" id="reelDrop">Tap to add the clip — captures a background for the branded opening &amp; helps write the caption<br><span style="font-size:12px">Stays on your device; the generated cover is sent with the approved post</span></div>
       <input type="file" id="reelFile" accept="video/*" class="hide">
       <div class="thumbs" id="reelThumb"></div>
       <label class="fld" style="margin-top:14px"><span class="lab">What happens in the Reel? <span class="hint">(helps the caption)</span></span><textarea id="reelNote" placeholder="e.g. 15s walkthrough of the pulsed-Joule reactor lighting up..."></textarea></label>`;
@@ -292,13 +292,16 @@ function grabFrame(file){
   return new Promise(res=>{
     try{
       const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";v.src=URL.createObjectURL(file);
-      v.onloadeddata=()=>{v.currentTime=Math.min(1,(v.duration||2)*0.25);};
+      v.onloadeddata=()=>{
+        const duration=v.duration||2;
+        v.currentTime=Math.max(0,Math.min(duration-0.1,Math.max(1,duration*0.25)));
+      };
       v.onseeked=()=>{try{const c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);res(c.toDataURL("image/jpeg",0.9));}catch(e){res(null);}URL.revokeObjectURL(v.src);};
       v.onerror=()=>res(null);
     }catch(e){res(null);}
   });
 }
-function renderReelThumb(){const t=document.getElementById("reelThumb");if(!t)return;t.innerHTML="";if(reelCover){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${reelCover}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{reelCover=null;renderReelThumb();const dr=document.getElementById("reelDrop");if(dr)dr.textContent="Tap to add the clip — used only to grab a cover frame & help write the caption";if(currentGraphic){currentGraphic.figure=null;drawCard("cardDisp");}};t.appendChild(d);}}
+function renderReelThumb(){const t=document.getElementById("reelThumb");if(!t)return;t.innerHTML="";if(reelCover){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${reelCover}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{reelCover=null;renderReelThumb();const dr=document.getElementById("reelDrop");if(dr)dr.textContent="Tap to add the clip — captures a branded-opening background & helps write the caption";if(currentGraphic){currentGraphic.figure=null;drawCard("cardDisp");}};t.appendChild(d);}}
 function figureSlot(label){
   return `<label class="fld"><span class="lab">${label}</span>
     <div class="drop" id="figDrop" style="padding:14px">Drop or <b>click to add an image</b></div>
@@ -431,7 +434,7 @@ function initOutput(p,built){
     pull_quote:p.pull_quote||p.subhead||"", eyebrow:built.eyebrow||"",
     meta1:built.meta1||"", meta2:built.meta2||"",
     figure: activeType==="photo"?(photos[0]&&photos[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
-    handle:s.handle, dept:s.dept
+    handle:s.handle, dept:s.dept, reelStyle:"underline"
   };
   renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
 }
@@ -466,36 +469,54 @@ function updateCounts(){const cc=document.getElementById("charCount");if(!cc)ret
 function renderGraphicTab(){
   const a=document.getElementById("tabBody");
   const g=currentGraphic;
+  const isReel=current.type==="reel";
+  if(isReel)g.template="reel";
   const initialSize=graphicSize(g.template);
-  a.innerHTML=`
-    <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
-    <div class="gctrls">
-      <label class="fld full"><span class="lab">Template</span>
+  const formatControl=isReel
+    ? `<label class="fld full"><span class="lab">Format</span><input type="text" value="Reel cover (9:16)" disabled></label>`
+    : `<label class="fld full"><span class="lab">Template</span>
         <select id="gTemplate">
           <option value="paper"${g.template==="paper"?" selected":""}>Paper card (1:1)</option>
           <option value="event"${g.template==="event"?" selected":""}>Event card (1:1)</option>
           <option value="quote"${g.template==="quote"?" selected":""}>Quote / spotlight (1:1)</option>
           <option value="photo"${g.template==="photo"?" selected":""}>Photo + overlay (4:5)</option>
-          <option value="reel"${g.template==="reel"?" selected":""}>Reel cover (9:16)</option>
-        </select></label>
-      <label class="fld"><span class="lab">Theme</span><div class="seg" id="gTheme"><button data-v="dark" class="${g.theme==="dark"?"on":""}">Dark</button><button data-v="light" class="${g.theme==="light"?"on":""}">Light</button></div></label>
-      <label class="fld"><span class="lab">Accent</span><input type="color" id="gAccent" value="${g.accent}"></label>
-      <label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>
+        </select></label>`;
+  const styleControl=isReel
+    ? `<label class="fld full"><span class="lab">Reel design</span>
+        <select id="gReelStyle">
+          <option value="underline"${(g.reelStyle||"underline")==="underline"?" selected":""}>Underline — lower third</option>
+          <option value="panel"${g.reelStyle==="panel"?" selected":""}>Framed panel</option>
+          <option value="banner"${g.reelStyle==="banner"?" selected":""}>Center banner</option>
+        </select></label>`
+    : `<label class="fld"><span class="lab">Theme</span><div class="seg" id="gTheme"><button data-v="dark" class="${g.theme==="dark"?"on":""}">Dark</button><button data-v="light" class="${g.theme==="light"?"on":""}">Light</button></div></label>`;
+  const detailControls=isReel?"":`
       <label class="fld full"><span class="lab" id="subLab">Subhead</span><input type="text" id="gSub" value="${esc(g.template==="quote"?g.pull_quote:g.subhead)}"></label>
       <label class="fld"><span class="lab">Detail line 1</span><input type="text" id="gM1" value="${esc(g.meta1)}"></label>
-      <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>
+      <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>`;
+  a.innerHTML=`
+    <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
+    <div class="gctrls">
+      ${formatControl}
+      ${styleControl}
+      <label class="fld"><span class="lab">Accent</span><input type="color" id="gAccent" value="${g.accent}"></label>
+      <label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>
+      ${detailControls}
     </div>
     <div class="out-acts"><button class="btn primary" id="dlGraphic">Download JPEG (${initialSize.label})</button><button class="btn green" id="approveBtn">Approve → queue</button></div>`;
   const redraw=()=>{
-    g.template=v("gTemplate"); g.accent=v("gAccent"); g.headline=v("gHead");
-    if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
-    g.meta1=v("gM1"); g.meta2=v("gM2");
-    document.getElementById("subLab").textContent=g.template==="quote"?"Quote text":"Subhead";
+    if(!isReel)g.template=v("gTemplate");
+    g.accent=v("gAccent"); g.headline=v("gHead");
+    if(isReel)g.reelStyle=v("gReelStyle")||"underline";
+    else{
+      if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
+      g.meta1=v("gM1"); g.meta2=v("gM2");
+      document.getElementById("subLab").textContent=g.template==="quote"?"Quote text":"Subhead";
+    }
     const dc=document.getElementById("cardDisp"); if(dc)dc.style.maxWidth=previewWidth(g.template);
     const dl=document.getElementById("dlGraphic"); if(dl)dl.textContent=`Download JPEG (${graphicSize(g.template).label})`;
     drawCard("cardDisp");
   };
-  ["gTemplate","gAccent","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);el.oninput=redraw;el.onchange=redraw;});
+  ["gTemplate","gReelStyle","gAccent","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
   document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));drawCard("cardDisp");});
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   document.getElementById("approveBtn").onclick=approve;
@@ -538,9 +559,38 @@ async function drawCard(canvasId){
     if(fig)coverDraw(ctx,fig,0,0,W,H); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
     const grad=ctx.createLinearGradient(0,H*0.45,0,H);grad.addColorStop(0,"rgba(15,13,11,0)");grad.addColorStop(1,"rgba(15,13,11,0.86)");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
     if(reel){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.9)";ctx.fillText("▶ REEL",P,P);}
-    ctx.fillStyle=acc;roundRect(ctx,P,H-300,84,8,4);ctx.fill();
-    if(g.headline){const f=fitLines(ctx,g.headline,{maxW:W-P*2,maxH:200,weight:"700",family:"'Space Grotesk'",max:78,min:40,lh:1.08});ctx.fillStyle="#fff";let y=H-270;ctx.font=`700 ${f.size}px 'Space Grotesk'`;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=f.size*1.08;});}
-    ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,H-92);
+    const f=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:reel?230:200,weight:"700",family:"'Space Grotesk'",max:78,min:40,lh:1.08});
+    const lineH=f.size*1.08;
+    if(!reel){
+      ctx.fillStyle=acc;roundRect(ctx,P,H-300,84,8,4);ctx.fill();
+      if(g.headline){ctx.fillStyle="#fff";let y=H-270;ctx.font=`700 ${f.size}px 'Space Grotesk'`;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=lineH;});}
+      ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,H-92);
+      return paint(canvasId);
+    }
+
+    // Reel designs stay inside the feed-preview safe area and above Instagram's
+    // bottom-left metrics. They vary the treatment without changing the format.
+    const style=g.reelStyle||"underline";
+    ctx.font=`700 ${f.size}px 'Space Grotesk'`;
+    if(style==="panel"){
+      const titleY=H-525, handleY=titleY+f.lines.length*lineH+24;
+      const panelY=titleY-48, panelH=(handleY-panelY)+76;
+      ctx.fillStyle="rgba(15,13,11,.74)";roundRect(ctx,P-30,panelY,W-P*2+60,panelH,28);ctx.fill();
+      ctx.fillStyle=acc;roundRect(ctx,P-30,panelY,12,panelH,6);ctx.fill();
+      ctx.fillStyle="#fff";let y=titleY;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=lineH;});
+      ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,handleY);
+    }else if(style==="banner"){
+      const bandY=H-760, titleY=bandY+58, handleY=titleY+f.lines.length*lineH+22;
+      ctx.fillStyle="rgba(15,13,11,.72)";ctx.fillRect(0,bandY,W,Math.max(250,handleY-bandY+68));
+      ctx.fillStyle=acc;ctx.fillRect(0,bandY,18,Math.max(250,handleY-bandY+68));
+      ctx.fillStyle="#fff";let y=titleY;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=lineH;});
+      ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,handleY);
+    }else{
+      const titleY=H-366;
+      ctx.fillStyle=acc;roundRect(ctx,P,titleY-30,84,8,4);ctx.fill();
+      ctx.fillStyle="#fff";let y=titleY;f.lines.forEach(l=>{ctx.fillText(l,P,y);y+=lineH;});
+      ctx.font="500 28px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.85)";ctx.fillText(g.handle||"",P,H-188);
+    }
     return paint(canvasId);
   }
 
