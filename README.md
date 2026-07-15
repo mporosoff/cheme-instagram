@@ -13,7 +13,7 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 
 Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor.
 
-Reels use a separate Make route: the Studio records a shared Google Drive MP4, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.
+Reels use a separate Make route: the Studio records a shared Google Drive MP4 or MOV file, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.
 
 ## How it works (the short version)
 

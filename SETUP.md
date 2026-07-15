@@ -106,7 +106,7 @@ Keep the working Photo scenario unchanged. Duplicate it, rename the copy **UR Ch
 4. In **Cloudinary ▸ Upload a Resource**, configure:
    - File type: **Base64 Encoded Data URI**
    - File: **Google Drive ▸ Download a File**
-   - MIME type: `video/mp4`
+   - MIME type: map **MIME type** from **Google Drive → Download a File** so both `video/mp4` and `video/quicktime` (MOV) work
    - Resource type: `video`
    - Upload preset and Public ID: leave blank
 5. Replace the Instagram photo module with **Instagram for Business (Facebook login) ▸ Create a Reel Post**. Select the same Facebook Page and map:
@@ -117,7 +117,7 @@ Keep the working Photo scenario unchanged. Duplicate it, rename the copy **UR Ch
 6. Keep **Google Sheets ▸ Update a Row** configured with the original row number, columns A–N mapped back to themselves, and `Posted` in `Status (O)`.
 7. When Make asks where Watch New Rows should start, choose the current/latest row so old Video rows are not published. Save the scenario but leave it **OFF** until the private Reel test is ready.
 
-For this first reliable route, use an MP4 stored in Google Drive, shared as **Anyone with the link**, and kept under approximately 60 MB. The Make/Cloudinary Base64 transfer is the limiting step even though Instagram itself accepts larger files.
+Use an MP4 or MOV stored in Google Drive, shared as **Anyone with the link**, and kept under approximately 60 MB. The Make/Cloudinary Base64 transfer is the limiting step even though Instagram itself accepts larger files. H.264 video with AAC audio is the most portable choice; some device-specific MOV codecs may need conversion before Instagram accepts them.
 
 ### Make troubleshooting
 
@@ -125,7 +125,7 @@ For this first reliable route, use an MP4 stored in Google Drive, shared as **An
 - **Invalid Photo URL:** the Photo URL field must contain only Cloudinary's `Secure URL`. Put the Sheet's `Caption (K)` token in the Caption field.
 - **Google Drive URL rejected:** expected. Instagram cannot fetch Google Drive files even when sharing is public; keep the Cloudinary upload step in the route.
 - **Reel file not found:** confirm that column N contains a Drive file ID, that the original Drive file is still available, and that it is shared with the Google account used by Make or with anyone who has the link.
-- **Cloudinary rejects a Reel:** confirm the resource type is `video`, the MIME type is `video/mp4`, and the MP4 is under approximately 60 MB.
+- **Cloudinary rejects a Reel:** confirm the resource type is `video`, the MIME type is mapped from Google Drive (`video/mp4` or `video/quicktime`), and the file is under approximately 60 MB.
 
 ---
 
@@ -140,7 +140,7 @@ The Studio exports Photo templates as a 1080×1350 JPEG (4:5), with text kept in
 
 Colleagues' submissions show up in the Sheet as **New** rows — raw material. To turn one into a post, recreate it in the studio and approve it; that writes a clean **Ready** row. (The New rows never post on their own.)
 
-**Reels:** upload an MP4 under approximately 60 MB to Google Drive and set it to **Anyone with the link**. In the Studio choose **Reel**, paste that Drive link, and optionally drop the same clip into the browser so the Studio can grab a cover frame and use it while drafting. The local clip is not uploaded by the browser. Approve sends the caption, generated 9:16 cover, and normalized Drive file ID to the queue as a `Video` row; the separate Make Reel scenario downloads and publishes the MP4.
+**Reels:** upload an MP4 or MOV under approximately 60 MB to Google Drive and set it to **Anyone with the link**. In the Studio choose **Reel**, paste that Drive link, and optionally drop the same clip into the browser so the Studio can grab a cover frame and use it while drafting. The local clip is not uploaded by the browser. Approve sends the caption, generated 9:16 cover, and normalized Drive file ID to the queue as a `Video` row; the separate Make Reel scenario downloads and publishes the video.
 
 ---
 
