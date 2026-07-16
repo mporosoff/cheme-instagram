@@ -9,6 +9,7 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 | `ig-content-studio.html` | The **Content Studio** — review department submissions, generate captions + graphics, and hit **Approve**. | You |
 | `cheme-submission-form.html` | A **submission form** colleagues can use to send you raw material. | Colleagues (optional) |
 | `Code.gs` | A Google Apps Script that catches submissions/approvals and files them into a Google Sheet. | Behind the scenes |
+| `Discovery.gs` | Optional faculty-news/publication discovery that adds verified-by-you leads to the review queue. | Behind the scenes |
 | `SETUP.md` | The full, do-this-then-that setup guide (≈1 hour, mostly one-time). | You |
 
 Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor.
@@ -43,6 +44,8 @@ Once hosted, your two pages live at:
 
 - Studio (bookmark for yourself): `https://mporosoff.github.io/cheme-instagram/ig-content-studio.html`
 - Form (share with colleagues): `https://mporosoff.github.io/cheme-instagram/cheme-submission-form.html`
+
+To supplement colleague submissions with faculty news and newly indexed publications, see **[DISCOVERY_SETUP.md](DISCOVERY_SETUP.md)**. The optional discovery job can collect source-attributed social-preview images, but it never auto-publishes; every lead enters the existing review queue as **New**.
 
 > You can also just double-click `ig-content-studio.html` to run it locally — hosting only matters for sharing the form and using the studio on your phone.
 

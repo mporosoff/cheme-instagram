@@ -367,8 +367,11 @@ async function fetchDoi(){
     const r=await fetch("https://api.crossref.org/works/"+path+"?mailto=studio@example.edu",{headers:{"Accept":"application/json"}});
     if(!r.ok)throw new Error("HTTP "+r.status);
     const m=(await r.json()).message;
-    const auth=(m.author||[]).slice(0,4).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ")+((m.author||[]).length>4?", et al.":"");
-    paperMeta={title:(m.title&&m.title[0])||"(untitled)",authors:auth||"",journal:(m["container-title"]&&m["container-title"][0])||"",year:(((m.published||{})["date-parts"]||[[]])[0]||[])[0]||"",abstract:(m.abstract||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()};
+    const authorList=m.author||[];
+    const auth=authorList.slice(0,4).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ")+(authorList.length>4?", et al.":"");
+    const firstAuthor=authorList[0]?[authorList[0].given,authorList[0].family].filter(Boolean).join(" "):"";
+    const authorCredit=firstAuthor+(authorList.length>1?" et al.":"");
+    paperMeta={title:(m.title&&m.title[0])||"(untitled)",authors:auth||"",authorCredit:authorCredit,journal:(m["container-title"]&&m["container-title"][0])||"",year:(((m.published||{})["date-parts"]||[[]])[0]||[])[0]||"",abstract:(m.abstract||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()};
     renderPaperMeta();
     if(paperMeta.abstract)document.getElementById("paperText").value=paperMeta.abstract;
     toast("Fetched ✓");
@@ -384,7 +387,7 @@ function buildBrief(){
     let b="CONTENT TYPE: New research paper highlight.\n";
     if(paperMeta)b+=`Title: ${paperMeta.title}\nAuthors: ${paperMeta.authors}\nJournal: ${paperMeta.journal} ${paperMeta.year}\n`;
     if(txt)b+=`Summary/abstract: ${txt}\n`; if(angle)b+=`Angle: ${angle}\n`;
-    return{brief:b,meta1:paperMeta?paperMeta.authors:"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
+    return{brief:b,meta1:paperMeta?(paperMeta.authorCredit||paperMeta.authors):"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
   }
   if(activeType==="event"){
     const title=val("evTitle"); if(!title)return{error:"Give the event a title first."};
@@ -420,6 +423,7 @@ function buildBrief(){
 
 /* ===== Claude ===== */
 const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
+const MAX_HASHTAGS=10;
 let lastBuilt=null;
 async function draft(){
   const key=getApiKey(); if(!key){openKeyModal();return;}
@@ -436,7 +440,7 @@ Voice: ${s.voice}
 Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. No markdown. Emoji sparingly if it fits.
 Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
 Graphic text must be SHORT and legible on a phone-sized post: headline punchy (<= 8 words), subhead a single clause.
-Hashtags: mix broad + niche/academic, no # symbol, max 30. Themes: ${s.hashtags}
+Hashtags: use only relevant broad + niche/academic tags, no # symbol, max ${MAX_HASHTAGS}. Themes: ${s.hashtags}
 Return ONLY valid JSON, no preamble, no code fences:
 {"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
   const content=[{type:"text",text:"Brief:\n\n"+built.brief}];
@@ -458,8 +462,18 @@ function setLoading(on){document.getElementById("glowbar").className="glowbar"+(
 
 /* ===== output state ===== */
 let current=null, currentGraphic=null, activeTab="caption";
+function reviewImageCredit(){
+  const m=String(reviewSource&&reviewSource.details||"").match(/(?:^|\n)IMAGE CREDIT:\s*([^\n]+)/i);
+  return m?m[1].trim():"";
+}
+function withReviewImageCredit(caption){
+  const credit=reviewImageCredit(),text=String(caption||"").trim();
+  const credited=text.split(/\n/).some(line=>/(?:📷|image|photo)/i.test(line)&&line.toLowerCase().includes(credit.toLowerCase()));
+  if(!credit||credited)return text;
+  return text+(text?"\n\n":"")+"📷 "+credit;
+}
 function initOutput(p,built){
-  current={caption:p.caption||"",hashtags:(p.hashtags||[]).map(h=>String(h).replace(/^#/,"")),alt_text:p.alt_text||"",type:activeType};
+  current={caption:withReviewImageCredit(p.caption||""),hashtags:(p.hashtags||[]).map(h=>String(h).replace(/^#/,"")).slice(0,MAX_HASHTAGS),alt_text:p.alt_text||"",type:activeType};
   const s=getSettings();
   currentGraphic={
     template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
@@ -486,7 +500,7 @@ function renderTab(){
 function renderCaptionTab(){
   const a=document.getElementById("tabBody");
   a.innerHTML=`<textarea class="caption-out" id="capOut"></textarea>
-    <div class="counts"><span><b id="charCount">0</b> chars <span id="charNote"></span></span><span><b id="tagCount">0</b>/30 tags</span></div>
+    <div class="counts"><span><b id="charCount">0</b> chars <span id="charNote"></span></span><span><b id="tagCount">0</b>/${MAX_HASHTAGS} tags</span></div>
     <div class="tags" id="tagBox"></div>
     <div class="alt"><span class="lab">Alt text</span><span id="altText"></span></div>
     <div class="out-acts"><button class="btn" id="copyCap">Copy caption</button><button class="btn" id="copyAll">Copy caption + tags</button><button class="btn ghost" id="regen">Regenerate</button></div>`;
@@ -639,6 +653,38 @@ async function drawCard(canvasId){
   ctx.fillText((g.handle||g.dept||"").toUpperCase(),P+36,P-2);
   ctx.textAlign="right"; ctx.fillText(new Date().toLocaleDateString(undefined,{month:"short",year:"numeric"}).toUpperCase(),W-P,P-2); ctx.textAlign="left";
 
+  if(g.template==="event"){
+    // Event cards put the visual first, then present when/where in a dedicated
+    // information panel. This keeps them clearly distinct from paper cards.
+    ctx.fillStyle=acc;ctx.fillRect(0,0,24,H);
+    let y=P+100;
+    ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle=acc;
+    ctx.fillText((g.eyebrow||"Event").toUpperCase(),P,y);y+=58;
+    if(fig){
+      const imageH=300;
+      ctx.save();roundRect(ctx,P,y,W-P*2,imageH,18);ctx.clip();coverDraw(ctx,fig,P,y,W-P*2,imageH);ctx.restore();
+      ctx.strokeStyle=dark?"rgba(255,255,255,.10)":"rgba(0,0,0,.10)";ctx.lineWidth=2;roundRect(ctx,P,y,W-P*2,imageH,18);ctx.stroke();
+      y+=imageH+38;
+    }
+    const maxHeadlineH=fig?190:350;
+    const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:maxHeadlineH,weight:"700",family:"'Space Grotesk'",max:fig?70:88,min:40,lh:1.06});
+    ctx.fillStyle=fg;ctx.font=`700 ${hf.size}px 'Space Grotesk'`;hf.lines.forEach(l=>{ctx.fillText(l,P,y);y+=hf.size*1.06;});
+    if(g.subhead&&!fig){
+      y+=18;
+      const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:120,weight:"500",family:"'IBM Plex Sans'",max:38,min:27,lh:1.24});
+      ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,y);y+=sf.size*1.24;});
+    }
+    const panelY=H-250,panelH=158;
+    ctx.fillStyle=dark?"rgba(255,255,255,.07)":"#FFFFFF";roundRect(ctx,P,panelY,W-P*2,panelH,20);ctx.fill();
+    ctx.strokeStyle=dark?"rgba(255,255,255,.12)":"rgba(28,27,25,.10)";ctx.lineWidth=2;roundRect(ctx,P,panelY,W-P*2,panelH,20);ctx.stroke();
+    ctx.fillStyle=acc;roundRect(ctx,P+28,panelY+30,10,panelH-60,5);ctx.fill();
+    ctx.font="600 38px 'Space Grotesk'";ctx.fillStyle=fg;
+    ctx.fillText(clip(ctx,g.meta1||"DATE & TIME",W-P*2-92,"600 38px 'Space Grotesk'"),P+66,panelY+28);
+    ctx.font="500 29px 'IBM Plex Sans'";ctx.fillStyle=muted;
+    ctx.fillText(clip(ctx,g.meta2||g.dept||"",W-P*2-92,"500 29px 'IBM Plex Sans'"),P+66,panelY+86);
+    return paint(canvasId);
+  }
+
   if(g.template==="quote"){
     const qt=g.pull_quote||g.subhead||g.headline||"";
     const f=fitLines(ctx,"\u201C"+qt+"\u201D",{maxW:W-P*2,maxH:560,weight:"500 italic",family:"'Newsreader'",max:84,min:40,lh:1.18});
@@ -649,7 +695,7 @@ async function drawCard(canvasId){
     return paint(canvasId);
   }
 
-  // paper / event
+  // paper card
   let cursor=P+92;
   if(g.eyebrow){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle=acc;ctx.fillText(g.eyebrow.toUpperCase(),P,cursor);cursor+=66;}
   const hasFig=!!fig;
@@ -679,6 +725,7 @@ function getQueue(){try{return JSON.parse(lsGet("igs2_queue")||"[]");}catch(e){r
 function setQueue(q){lsSet("igs2_queue",JSON.stringify(q));renderQueue();}
 async function approve(){
   if(!current)return;
+  current.caption=withReviewImageCredit(current.caption);
   const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,date:new Date().toISOString()});setQueue(q);
   const url=(getSettings().publishUrl||"").trim();
   if(url.indexOf("http")===0){
@@ -708,7 +755,7 @@ function openReviewQueue(){
   const url=(getSettings().publishUrl||"").trim();
   if(url.indexOf("http")!==0){toast("Add the publishing queue URL under Voice & brand first");return;}
   if(!getManagerToken()){openReviewAuth();return;}
-  modal(`<h2>Department submission review</h2><p>Only public-form rows marked <b>New</b> or <b>Reviewing</b> appear here.</p><div id="reviewState" class="qempty">Loading submissions…</div><div class="review-grid" id="reviewGrid"></div><div class="out-acts"><button class="btn ghost" id="forgetReviewToken">Forget manager token</button><button class="btn" id="closeReview">Close</button></div>`,true);
+  modal(`<h2>Department content review</h2><p>Submissions and discovery leads marked <b>New</b> or <b>Reviewing</b> appear here.</p><div id="reviewState" class="qempty">Loading submissions…</div><div class="review-grid" id="reviewGrid"></div><div class="out-acts"><button class="btn ghost" id="forgetReviewToken">Forget manager token</button><button class="btn" id="closeReview">Close</button></div>`,true);
   document.getElementById("closeReview").onclick=closeModal;
   document.getElementById("forgetReviewToken").onclick=()=>{forgetManagerToken();closeModal();toast("Manager token removed");};
   refreshReviewQueue();
@@ -727,7 +774,7 @@ async function refreshReviewQueue(){
     state.textContent=data.items.length?`${data.items.length} submission${data.items.length===1?"":"s"} waiting`:"Nothing is waiting for review.";
     data.items.forEach(item=>{
       const card=document.createElement("div");card.className="review-card";
-      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span></div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions"><button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
+      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span></div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
       card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId);
       card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed");
       card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected");};
