@@ -482,7 +482,8 @@ function initOutput(p,built){
     pull_quote:p.pull_quote||p.subhead||"", eyebrow:built.eyebrow||"",
     meta1:built.meta1||"", meta2:built.meta2||"",
     figure: activeType==="photo"?(photos[0]&&photos[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
-    handle:s.handle, dept:s.dept, reelStyle:"underline"
+    handle:s.handle, dept:s.dept, reelStyle:"underline",
+    imageFit:(activeType==="photo"||activeType==="reel")?"cover":"contain"
   };
   renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
 }
@@ -541,12 +542,21 @@ function renderGraphicTab(){
       <label class="fld full"><span class="lab" id="subLab">Subhead</span><input type="text" id="gSub" value="${esc(g.template==="quote"?g.pull_quote:g.subhead)}"></label>
       <label class="fld"><span class="lab">Detail line 1</span><input type="text" id="gM1" value="${esc(g.meta1)}"></label>
       <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>`;
+  const imageFitControl=g.figure?`
+      <label class="fld full"><span class="lab">Image fit</span>
+        <select id="gImageFit">
+          <option value="contain"${(g.imageFit||"contain")==="contain"?" selected":""}>Show entire image</option>
+          <option value="cover"${g.imageFit==="cover"?" selected":""}>Fill frame (crop edges)</option>
+        </select>
+        <span class="hint">Use “Show entire image” for graphical abstracts, plots, and diagrams.</span>
+      </label>`:"";
   a.innerHTML=`
     <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
     <div class="gctrls">
       ${formatControl}
       ${styleControl}
       <label class="fld"><span class="lab">Accent</span><input type="color" id="gAccent" value="${g.accent}"></label>
+      ${imageFitControl}
       <label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>
       ${detailControls}
     </div>
@@ -554,6 +564,7 @@ function renderGraphicTab(){
   const redraw=()=>{
     if(!isReel)g.template=v("gTemplate");
     g.accent=v("gAccent"); g.headline=v("gHead");
+    if(document.getElementById("gImageFit"))g.imageFit=v("gImageFit")||"contain";
     if(isReel)g.reelStyle=v("gReelStyle")||"underline";
     else{
       if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
@@ -564,7 +575,7 @@ function renderGraphicTab(){
     const dl=document.getElementById("dlGraphic"); if(dl)dl.textContent=`Download JPEG (${graphicSize(g.template).label})`;
     drawCard("cardDisp");
   };
-  ["gTemplate","gReelStyle","gAccent","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
+  ["gTemplate","gReelStyle","gAccent","gImageFit","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
   document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));drawCard("cardDisp");});
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   document.getElementById("approveBtn").onclick=approve;
@@ -580,6 +591,8 @@ function wrap(ctx,text,maxW){const words=String(text||"").split(/\s+/);const lin
 function fitLines(ctx,text,{maxW,maxH,weight,family,max,min,lh}){let size=max;for(;size>=min;size-=2){ctx.font=`${weight} ${size}px ${family}`;const lines=wrap(ctx,text,maxW);if(lines.length*size*lh<=maxH)return{size,lines};}ctx.font=`${weight} ${min}px ${family}`;return{size:min,lines:wrap(ctx,text,maxW)};}
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 function coverDraw(ctx,img,x,y,w,h){const ir=img.width/img.height,r=w/h;let sw,sh,sx,sy;if(ir>r){sh=img.height;sw=sh*r;sx=(img.width-sw)/2;sy=0;}else{sw=img.width;sh=sw/r;sx=0;sy=(img.height-sh)/2;}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);}
+function containDraw(ctx,img,x,y,w,h,padding){const p=Math.max(0,padding||0),aw=Math.max(1,w-p*2),ah=Math.max(1,h-p*2),scale=Math.min(aw/img.width,ah/img.height),dw=img.width*scale,dh=img.height*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
+function framedImageDraw(ctx,img,x,y,w,h,fit){if((fit||"contain")==="cover")coverDraw(ctx,img,x,y,w,h);else{ctx.fillStyle="#FFFFFF";ctx.fillRect(x,y,w,h);containDraw(ctx,img,x,y,w,h,18);}}
 function graphicSize(template){
   if(template==="reel")return{width:1080,height:1920,label:"1080×1920"};
   if(template==="photo")return{width:1080,height:1350,label:"1080×1350"};
@@ -604,7 +617,7 @@ async function drawCard(canvasId){
   const fig = g.figure ? await loadImg(g.figure) : null;
 
   if(g.template==="photo"||reel){
-    if(fig)coverDraw(ctx,fig,0,0,W,H); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
+    if(fig)framedImageDraw(ctx,fig,0,0,W,H,g.imageFit||(reel||g.template==="photo"?"cover":"contain")); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
     const grad=ctx.createLinearGradient(0,H*0.45,0,H);grad.addColorStop(0,"rgba(15,13,11,0)");grad.addColorStop(1,"rgba(15,13,11,0.86)");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
     if(reel){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.9)";ctx.fillText("▶ REEL",P,P);}
     const f=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:reel?230:200,weight:"700",family:"'Space Grotesk'",max:78,min:40,lh:1.08});
@@ -662,7 +675,7 @@ async function drawCard(canvasId){
     ctx.fillText((g.eyebrow||"Event").toUpperCase(),P,y);y+=58;
     if(fig){
       const imageH=300;
-      ctx.save();roundRect(ctx,P,y,W-P*2,imageH,18);ctx.clip();coverDraw(ctx,fig,P,y,W-P*2,imageH);ctx.restore();
+      ctx.save();roundRect(ctx,P,y,W-P*2,imageH,18);ctx.clip();framedImageDraw(ctx,fig,P,y,W-P*2,imageH,g.imageFit||"contain");ctx.restore();
       ctx.strokeStyle=dark?"rgba(255,255,255,.10)":"rgba(0,0,0,.10)";ctx.lineWidth=2;roundRect(ctx,P,y,W-P*2,imageH,18);ctx.stroke();
       y+=imageH+38;
     }
@@ -704,7 +717,7 @@ async function drawCard(canvasId){
   ctx.fillStyle=fg; ctx.font=`700 ${hf.size}px 'Space Grotesk'`; hf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=hf.size*1.07;});
   cursor+=14;
   if(g.subhead && !hasFig){const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:200,weight:"500",family:"'IBM Plex Sans'",max:40,min:28,lh:1.3});ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=sf.size*1.3;});}
-  if(hasFig){const fy=Math.max(cursor+10,440),fh=H-fy-220;ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();coverDraw(ctx,fig,P,fy,W-P*2,fh);ctx.restore();ctx.strokeStyle=dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)";ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();}
+  if(hasFig){const fy=Math.max(cursor+10,440),fh=H-fy-220;ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();framedImageDraw(ctx,fig,P,fy,W-P*2,fh,g.imageFit||"contain");ctx.restore();ctx.strokeStyle=dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)";ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();}
   // footer meta
   ctx.fillStyle=acc; roundRect(ctx,P,H-220,70,7,4); ctx.fill();
   if(g.meta1){ctx.font="600 32px 'Space Grotesk'";ctx.fillStyle=fg;ctx.fillText(clip(ctx,g.meta1,W-P*2,"600 32px 'Space Grotesk'"),P,H-182);}
