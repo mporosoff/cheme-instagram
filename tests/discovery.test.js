@@ -218,5 +218,9 @@ assert.match(studioSource, /function reviewDetailsForDraft_\(item\)/,
 assert.match(studioSource, /const reviewDetails=reviewDetailsForDraft_\(reviewSource\)/);
 assert.doesNotMatch(studioSource, /Details: \$\{reviewSource\.details\|\|""\}/,
   "raw Discovery details must never be appended to the model brief");
+assert.match(studioSource, /const fallbackHeadline=built\.headlineHint\|\|\(reviewSource&&reviewSource\.title\)\|\|""/,
+  "review graphics must fall back to the verified source title");
+assert.match(studioSource, /pull_quote:p\.pull_quote\|\|p\.subhead\|\|graphicHeadline/,
+  "quote graphics must never be blank when a review title is available");
 
 console.log("Discovery tests passed");

@@ -525,11 +525,13 @@ function withReviewImageCredit(caption){
 function initOutput(p,built){
   current={caption:withReviewImageCredit(p.caption||""),hashtags:(p.hashtags||[]).map(h=>String(h).replace(/^#/,"")).slice(0,MAX_HASHTAGS),alt_text:p.alt_text||"",type:activeType};
   const s=getSettings();
+  const fallbackHeadline=built.headlineHint||(reviewSource&&reviewSource.title)||"";
+  const graphicHeadline=p.headline||fallbackHeadline;
   currentGraphic={
     template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
     theme:s.theme, accent:s.accent, stylePreset:s.stylePreset||"rochester", logo:s.logo||"",
-    headline:p.headline||built.headlineHint||"", subhead:p.subhead||"",
-    pull_quote:p.pull_quote||p.subhead||"", eyebrow:built.eyebrow||"",
+    headline:graphicHeadline, subhead:p.subhead||"",
+    pull_quote:p.pull_quote||p.subhead||graphicHeadline, eyebrow:built.eyebrow||"",
     meta1:built.meta1||"", meta2:built.meta2||"",
     figure: activeType==="photo"?(photos[0]&&photos[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
     handle:s.handle, dept:s.dept, reelStyle:"underline",
