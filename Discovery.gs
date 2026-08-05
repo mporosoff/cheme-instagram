@@ -895,6 +895,7 @@ function saveDiscoveryCandidates_(candidates) {
   }
   if (rows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
+    if (typeof invalidateReviewQueueCache_ === "function") invalidateReviewQueueCache_();
     // Page hashes advance only after their corresponding queue rows are safely
     // written. Items deferred by the run cap are therefore retried tomorrow.
     for (var k = 0; k < added.length; k++) commitMonitorState_(added[k]);

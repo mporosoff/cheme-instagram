@@ -987,39 +987,61 @@ async function refreshReviewQueue(){
     data.items.forEach(item=>{
       const card=document.createElement("div");card.className="review-card";
       card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${item.mediaFileId?' <span class="qcount">Image ready</span>':''}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
-      card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId);
-      card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed");
-      card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected");};
+      card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId,card);
+      card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed",card);
+      card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected",card);};
       grid.appendChild(card);
     });
-  }catch(e){state.innerHTML=`<div class="err">${esc(e.message||e)} If the token was regenerated, choose “Forget manager token” and reconnect.</div>`;}
+  }catch(e){
+    state.innerHTML=`<div class="err">${esc(reviewQueueErrorMessage_(e))}<br><button class="btn sm" id="retryReviewQueue" style="margin-top:10px">Try again</button></div>`;
+    const retry=document.getElementById("retryReviewQueue");if(retry)retry.onclick=refreshReviewQueue;
+  }
 }
 function queueJsonp(action,params){
   const base=(getSettings().publishUrl||"").trim();
   return new Promise((resolve,reject)=>{
     const cb="igsReview_"+Date.now()+"_"+Math.random().toString(36).slice(2);
     const script=document.createElement("script");
-    const timer=setTimeout(()=>finish(new Error("The review queue did not respond.")),action==="detail"?30000:15000);
-    const finish=(err,data)=>{clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
+    const timeoutMs=action==="detail"?90000:45000;
+    let settled=false;
+    const timer=setTimeout(()=>finish(new Error(action==="detail"?"Loading the submission and image timed out.":"The review queue request timed out.")),timeoutMs);
+    const finish=(err,data)=>{if(settled)return;settled=true;clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
     window[cb]=data=>finish(null,data);
     const q=new URLSearchParams({action,token:getManagerToken(),callback:cb,...params});
     script.onerror=()=>finish(new Error("Could not reach the review queue."));script.src=base+"?"+q.toString();document.head.appendChild(script);
   });
 }
-async function reviewStatus(submissionId,status){
-  try{
-    await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status})});
-    setTimeout(refreshReviewQueue,500);toast(`Marked ${status.toLowerCase()} ✓`);
-  }catch(e){toast("Could not update that submission");}
+function reviewQueueErrorMessage_(error){
+  const message=String(error&&error.message||error||"Review queue failed.");
+  if(/authorization failed|not configured/i.test(message))return message+" Choose “Forget manager token” and reconnect.";
+  if(/timed out|did not respond|could not reach/i.test(message))return message+" This usually means Apps Script was slow or temporarily unavailable—not that your token changed.";
+  return message;
 }
-async function loadReviewSubmission(submissionId){
-  const state=document.getElementById("reviewState");if(state)state.textContent="Loading submission and media…";
+function setReviewCardBusy_(card,busy){
+  if(!card)return;
+  card.querySelectorAll("button").forEach(button=>button.disabled=busy);
+}
+function updateReviewQueueCount_(){
+  const state=document.getElementById("reviewState"),grid=document.getElementById("reviewGrid");if(!state||!grid)return;
+  const count=grid.querySelectorAll(".review-card").length;
+  state.textContent=count?`${count} submission${count===1?"":"s"} waiting`:"Nothing is waiting for review.";
+}
+async function reviewStatus(submissionId,status,card){
+  setReviewCardBusy_(card,true);
   try{
-    await reviewStatus(submissionId,"Reviewing");
-    const data=await queueJsonp("detail",{submissionId});
+    const data=await queueJsonp("update",{submissionId,status});
+    if(!data.ok)throw new Error(data.error||"Could not update that submission.");
+    if(card)card.remove();updateReviewQueueCount_();toast(`Marked ${status.toLowerCase()} ✓`);return true;
+  }catch(e){toast(reviewQueueErrorMessage_(e));setReviewCardBusy_(card,false);return false;}
+}
+async function loadReviewSubmission(submissionId,card){
+  const state=document.getElementById("reviewState");if(state)state.textContent="Loading submission and media…";
+  setReviewCardBusy_(card,true);
+  try{
+    const data=await queueJsonp("detail",{submissionId,markReviewing:"1"});
     if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
     applyReviewSubmission(data.item);closeModal();toast(data.item.imageBase64?"Submission and source image loaded ✓":"Submission loaded — no automatic source image was available");
-  }catch(e){if(state)state.innerHTML=`<div class="err">${esc(e.message||e)}</div>`;}
+  }catch(e){setReviewCardBusy_(card,false);if(state)state.innerHTML=`<div class="err">${esc(reviewQueueErrorMessage_(e))}</div>`;}
 }
 function applyReviewSubmission(item){
   reviewSource=item;paperMeta=null;photos=[];figure=null;reelCover=null;reelVideoLink="";
