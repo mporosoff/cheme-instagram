@@ -20,6 +20,10 @@ var FOLDER_NAME = "UR ChemE IG Media";
 var SHEET_NAME = "Posts";
 var MAX_PUBLIC_SUBMISSIONS_PER_HOUR = 40;
 var MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+var MAX_REVIEW_LIST_ITEMS = 60;
+var REVIEW_LIST_PREVIEW_CHARS = 700;
+var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v2";
+var REVIEW_QUEUE_CACHE_SECONDS = 45;
 var HEADERS = [
   "Timestamp", "Submitter", "Credit", "Type", "Title", "Details",
   "Date", "Time", "Location", "Link", "Caption", "MediaURL",
@@ -54,7 +58,15 @@ function doGet(e) {
     }
     requireManager_(p.token);
     if (action === "list") return jsonp_({ ok: true, items: listReviewItems_() }, p.callback);
-    if (action === "detail") return jsonp_({ ok: true, item: getReviewDetail_(sanitizeId_(p.submissionId)) }, p.callback);
+    if (action === "detail") {
+      return jsonp_({
+        ok: true,
+        item: getReviewDetail_(sanitizeId_(p.submissionId), p.markReviewing === "1")
+      }, p.callback);
+    }
+    if (action === "update") {
+      return jsonp_(managerReviewUpdate_(p.submissionId, p.status, p.error), p.callback);
+    }
     return jsonp_({ ok: false, error: "Unknown action." }, p.callback);
   } catch (err) {
     return jsonp_({ ok: false, error: String(err && err.message || err) }, p.callback);
@@ -98,6 +110,7 @@ function handleSubmission_(d) {
     mediaUrl, fileId, videoLink, isStudio ? "Ready" : "New", submissionId,
     "", "", "", sourceSubmissionId
   ]);
+  invalidateReviewQueueCache_();
 
   if (sourceSubmissionId) updateSubmissionStatus_(sourceSubmissionId, "Reviewed", "", sheet);
   if (!isStudio) {
@@ -144,35 +157,54 @@ function enforceRateLimit_() {
 
 function handleManagerUpdate_(d) {
   requireManager_(d.managerToken);
+  return json_(managerReviewUpdate_(d.submissionId, d.status, d.error));
+}
+
+function managerReviewUpdate_(submissionId, status, errorText) {
   var allowed = { New: true, Reviewing: true, Reviewed: true, Rejected: true };
-  var nextStatus = String(d.status || "");
+  var nextStatus = String(status || "");
   if (!allowed[nextStatus]) throw new Error("Invalid review status.");
-  var id = sanitizeId_(d.submissionId);
+  var id = sanitizeId_(submissionId);
   if (!id) throw new Error("Submission ID is required.");
-  var updated = updateSubmissionStatus_(id, nextStatus, clean_(d.error, 2000));
-  return json_({ ok: updated, submissionId: id, status: nextStatus });
+  var updated = updateSubmissionStatus_(id, nextStatus, clean_(errorText, 2000));
+  return { ok: updated, submissionId: id, status: nextStatus };
 }
 
 function listReviewItems_() {
+  var cached = readReviewQueueCache_();
+  if (cached) return cached;
   var sheet = getSheet_();
   if (sheet.getLastRow() < 2) return [];
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+  // The queue cards need only A:P. Full details/media are fetched for the one
+  // item the reviewer opens, so avoid transferring the publishing-only columns.
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
   var out = [];
-  for (var i = rows.length - 1; i >= 0 && out.length < 100; i--) {
+  for (var i = rows.length - 1; i >= 0 && out.length < MAX_REVIEW_LIST_ITEMS; i--) {
     var item = rowObject_(rows[i], i + 2);
-    if (item.status === "New" || item.status === "Reviewing") out.push(item);
+    if (item.status === "New" || item.status === "Reviewing") {
+      item.details = truncateText_(item.details, REVIEW_LIST_PREVIEW_CHARS);
+      out.push(item);
+    }
   }
+  writeReviewQueueCache_(out);
   return out;
 }
 
-function getReviewDetail_(submissionId) {
-  var item = findSubmission_(submissionId);
+function getReviewDetail_(submissionId, markReviewing) {
+  var sheet = getSheet_();
+  var item = findSubmission_(submissionId, sheet);
   if (!item) throw new Error("Submission not found.");
+  if (markReviewing && item.status !== "Reviewing") {
+    sheet.getRange(item.rowNumber, 15).setValue("Reviewing");
+    item.status = "Reviewing";
+    updateReviewQueueCacheStatus_(item.submissionId, "Reviewing");
+  }
   if (item.mediaFileId) {
     try {
       var blob = DriveApp.getFileById(item.mediaFileId).getBlob();
-      if (blob.getBytes().length <= MAX_IMAGE_BYTES) {
-        item.imageBase64 = Utilities.base64Encode(blob.getBytes());
+      var bytes = blob.getBytes();
+      if (bytes.length <= MAX_IMAGE_BYTES) {
+        item.imageBase64 = Utilities.base64Encode(bytes);
         item.imageType = blob.getContentType() || "image/jpeg";
         item.imageName = blob.getName();
       }
@@ -189,7 +221,64 @@ function updateSubmissionStatus_(submissionId, status, errorText, optSheet) {
   if (!found) return false;
   sheet.getRange(found.rowNumber, 15).setValue(status);
   if (typeof errorText !== "undefined") sheet.getRange(found.rowNumber, 19).setValue(errorText || "");
+  updateReviewQueueCacheStatus_(submissionId, status);
   return true;
+}
+
+function readReviewQueueCache_() {
+  try {
+    var value = CacheService.getScriptCache().get(REVIEW_QUEUE_CACHE_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeReviewQueueCache_(items) {
+  try {
+    CacheService.getScriptCache().put(
+      REVIEW_QUEUE_CACHE_KEY,
+      JSON.stringify(items || []),
+      REVIEW_QUEUE_CACHE_SECONDS
+    );
+  } catch (err) {
+    // Cache is an optimization; the Sheet remains authoritative.
+  }
+}
+
+function invalidateReviewQueueCache_() {
+  try { CacheService.getScriptCache().remove(REVIEW_QUEUE_CACHE_KEY); }
+  catch (err) {}
+}
+
+function updateReviewQueueCacheStatus_(submissionId, status) {
+  var items = readReviewQueueCache_();
+  if (!items) return;
+  var found = false;
+  var out = [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (String(item.submissionId || "") === String(submissionId || "")) {
+      found = true;
+      if (status === "New" || status === "Reviewing") {
+        item.status = status;
+        out.push(item);
+      }
+    } else {
+      out.push(item);
+    }
+  }
+  if (!found && (status === "New" || status === "Reviewing")) {
+    invalidateReviewQueueCache_();
+    return;
+  }
+  writeReviewQueueCache_(out);
+}
+
+function truncateText_(value, max) {
+  var text = String(value || "");
+  var limit = Number(max || 0);
+  return limit > 0 && text.length > limit ? text.slice(0, limit - 1).trim() + "…" : text;
 }
 
 function findSubmission_(submissionId, optSheet) {
