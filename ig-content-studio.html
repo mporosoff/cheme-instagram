@@ -1026,11 +1026,15 @@ function updateReviewQueueCount_(){
   const count=grid.querySelectorAll(".review-card").length;
   state.textContent=count?`${count} submission${count===1?"":"s"} waiting`:"Nothing is waiting for review.";
 }
+async function legacyReviewStatus_(submissionId,status){
+  await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status})});
+}
 async function reviewStatus(submissionId,status,card){
   setReviewCardBusy_(card,true);
   try{
     const data=await queueJsonp("update",{submissionId,status});
-    if(!data.ok)throw new Error(data.error||"Could not update that submission.");
+    if(!data.ok&&/unknown action/i.test(data.error||""))await legacyReviewStatus_(submissionId,status);
+    else if(!data.ok)throw new Error(data.error||"Could not update that submission.");
     if(card)card.remove();updateReviewQueueCount_();toast(`Marked ${status.toLowerCase()} ✓`);return true;
   }catch(e){toast(reviewQueueErrorMessage_(e));setReviewCardBusy_(card,false);return false;}
 }

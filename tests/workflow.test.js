@@ -114,6 +114,8 @@ assert.match(studioSource, /queueJsonp\("detail",\{submissionId,markReviewing:"1
   "Studio load should combine detail retrieval and the Reviewing update");
 assert.match(studioSource, /queueJsonp\("update",\{submissionId,status\}\)/,
   "review decisions should use one acknowledged JSONP update");
+assert.match(studioSource, /unknown action[\s\S]*legacyReviewStatus_\(submissionId,status\)/i,
+  "the hosted Studio must remain compatible until the new Apps Script version is deployed");
 assert.doesNotMatch(studioSource, /setTimeout\(refreshReviewQueue,500\)/,
   "review decisions must not trigger a competing full queue reload");
 assert.match(studioSource, /action==="detail"\?90000:45000/,
