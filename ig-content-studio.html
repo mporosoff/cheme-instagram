@@ -110,12 +110,12 @@
   .style-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
   .style-choice{position:relative;display:block;cursor:pointer;}
   .style-choice input{position:absolute;opacity:0;pointer-events:none;}
-  .style-card{height:100%;padding:11px;border:1.5px solid var(--line-strong);border-radius:9px;background:var(--card);transition:.12s;}
+  .style-card{display:flex;flex-direction:column;min-height:92px;height:100%;padding:11px;border:1.5px solid var(--line-strong);border-radius:9px;background:var(--card);overflow:hidden;transition:.12s;}
   .style-card .name{display:block;font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.25;}
   .style-card .desc{display:block;font-size:11px;color:var(--slate);line-height:1.3;margin-top:3px;}
   .style-choice input:checked + .style-card{border-color:#001E5F;box-shadow:0 0 0 2px rgba(0,30,95,.12);}
   .style-choice input:focus-visible + .style-card{outline:2px solid #FFD82B;outline-offset:2px;}
-  .swatches{display:flex;gap:4px;margin-top:8px;}
+  .swatches{display:flex;gap:4px;margin-top:auto;padding-top:8px;}
   .swatches i{display:block;width:18px;height:8px;border-radius:6px;border:1px solid rgba(0,0,0,.09);}
 
   /* queue */
@@ -468,7 +468,7 @@ function buildBrief(){
 
 /* ===== Claude ===== */
 const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
-const MAX_HASHTAGS=10;
+const MAX_HASHTAGS=5;
 let lastBuilt=null;
 async function draft(){
   const key=getApiKey(); if(!key){openKeyModal();return;}
@@ -677,8 +677,9 @@ function drawBrandHeader(ctx,g,s,W,P,logo){
   }else{
     ctx.font=`700 24px ${s.label}`;ctx.fillStyle=s.fg;ctx.fillText("UNIVERSITY OF ROCHESTER",P,62);
   }
-  ctx.textAlign="right";ctx.font=`600 19px ${s.label}`;ctx.fillStyle=s.id==="light"?s.fg:s.muted;
-  ctx.fillText("DEPARTMENT OF CHEMICAL & SUSTAINABILITY ENGINEERING",W-P,61);ctx.textAlign="left";
+  ctx.textAlign="right";ctx.font=`600 18px ${s.label}`;ctx.fillStyle=s.id==="light"?s.fg:s.muted;
+  ctx.fillText("DEPARTMENT OF CHEMICAL &",W-P,51);
+  ctx.fillText("SUSTAINABILITY ENGINEERING",W-P,78);ctx.textAlign="left";
   const ruleX=s.id==="cobalt"?350:P;
   ctx.fillStyle=s.accent;ctx.fillRect(ruleX,138,W-P-ruleX,7);
 }
