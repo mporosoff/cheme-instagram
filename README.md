@@ -47,7 +47,7 @@ Once hosted, your two pages live at:
 - Studio (bookmark for yourself): `https://mporosoff.github.io/cheme-instagram/ig-content-studio.html`
 - Form (share with colleagues): `https://mporosoff.github.io/cheme-instagram/cheme-submission-form.html`
 
-To supplement colleague submissions with faculty news and newly indexed publications, see **[DISCOVERY_SETUP.md](DISCOVERY_SETUP.md)**. The optional discovery job can collect source-attributed social-preview images, but it never auto-publishes; every lead enters the existing review queue as **New**.
+To supplement colleague submissions with faculty news and newly indexed publications, see **[DISCOVERY_SETUP.md](DISCOVERY_SETUP.md)** and the complete **[source coverage table](DISCOVERY_COVERAGE.md)**. The optional discovery job can collect source-attributed social-preview images, but it never auto-publishes; every lead enters the existing review queue as **New**.
 
 > You can also just double-click `ig-content-studio.html` to run it locally — hosting only matters for sharing the form and using the studio on your phone.
 

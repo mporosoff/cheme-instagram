@@ -314,7 +314,8 @@ function renderForm(){
       ${figureSlot("Add a speaker photo / poster (optional)")}`;
     wireFigure();
   } else if(activeType==="photo"){
-    a.innerHTML=`<div class="drop" id="drop">Drop a photo or <b>click to upload</b><br><span style="font-size:12px">This image becomes the post — JPEG works best</span></div>
+    const photoReady=photos.length>0;
+    a.innerHTML=`<div class="drop" id="drop">${photoReady?"Source image loaded ✓ — <b>click or drop to replace it</b>":"Drop a photo or <b>click to upload</b>"}<br><span style="font-size:12px">${photoReady?"Discovery supplied this image; verify credit and reuse rights before approval":"This image becomes the post — JPEG works best"}</span></div>
       <input type="file" id="fileInput" accept="image/*" class="hide">
       <div class="thumbs" id="thumbs"></div>
       <label class="fld" style="margin-top:14px"><span class="lab">What's in the photo? <span class="hint">(helps the caption)</span></span><textarea id="photoNote" placeholder="e.g. Undergrad running the pulsed-Joule reactor..."></textarea></label>`;
@@ -350,7 +351,8 @@ function renderLoadedReviewBanner(){
   if(!reviewSource)return;
   const a=document.getElementById("formArea");if(!a)return;
   const box=document.createElement("div");box.className="meta-card loaded-review";
-  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ID ${esc(reviewSource.submissionId||"")}</div></div><button type="button">Clear</button>`;
+  const imageState=reviewSource.imageBase64?"Source image loaded automatically":(reviewSource.mediaError||"No automatic source image found; upload remains optional");
+  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><button type="button">Clear</button>`;
   box.querySelector("button").onclick=()=>{reviewSource=null;renderForm();};
   a.prepend(box);
 }
@@ -379,8 +381,9 @@ function grabFrame(file){
 }
 function renderReelThumb(){const t=document.getElementById("reelThumb");if(!t)return;t.innerHTML="";if(reelCover){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${reelCover}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{reelCover=null;renderReelThumb();const dr=document.getElementById("reelDrop");if(dr)dr.textContent="Tap to add the clip — captures a branded-opening background & helps write the caption";if(currentGraphic){currentGraphic.figure=null;drawCard("cardDisp");}};t.appendChild(d);}}
 function figureSlot(label){
+  const ready=!!(figure&&figure.dataUrl);
   return `<label class="fld"><span class="lab">${label}</span>
-    <div class="drop" id="figDrop" style="padding:14px">Drop or <b>click to add an image</b></div>
+    <div class="drop" id="figDrop" style="padding:14px">${ready?"Source image loaded ✓ — <b>click or drop to replace it</b>":"Drop or <b>click to add an image</b>"}</div>
     <input type="file" id="figInput" accept="image/*" class="hide">
     <div class="thumbs" id="figThumb"></div></label>`;
 }
@@ -432,7 +435,7 @@ function buildBrief(){
     let b="CONTENT TYPE: New research paper highlight.\n";
     if(paperMeta)b+=`Title: ${paperMeta.title}\nAuthors: ${paperMeta.authors}\nJournal: ${paperMeta.journal} ${paperMeta.year}\n`;
     if(txt)b+=`Summary/abstract: ${txt}\n`; if(angle)b+=`Angle: ${angle}\n`;
-    return{brief:b,meta1:paperMeta?(paperMeta.authorCredit||paperMeta.authors):"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
+    return{brief:b,withImage:!!figure,meta1:paperMeta?(paperMeta.authorCredit||paperMeta.authors):"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
   }
   if(activeType==="event"){
     const title=val("evTitle"); if(!title)return{error:"Give the event a title first."};
@@ -440,7 +443,7 @@ function buildBrief(){
     const date=val("evDate"),time=val("evTime"),loc=val("evLoc"),desc=val("evDesc"),link=val("evLink");
     if(date||time)b+=`When: ${date}${time?" "+time:""}\n`; if(loc)b+=`Where: ${loc}\n`; if(desc)b+=`Details: ${desc}\n`; if(link)b+=`Link: ${link}\n`;
     const dstr=date?new Date(date+"T00:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}):"";
-    return{brief:b,meta1:[dstr,time].filter(Boolean).join(" · "),meta2:loc,eyebrow:"Event",headlineHint:title};
+    return{brief:b,withImage:!!figure,meta1:[dstr,time].filter(Boolean).join(" · "),meta2:loc,eyebrow:"Event",headlineHint:title};
   }
   if(activeType==="reel"){
     const note=val("reelNote"); reelVideoLink=extractDriveFileId(val("reelLink"));
@@ -461,7 +464,7 @@ function buildBrief(){
     let b="CONTENT TYPE: Reposting a department member's content. Credit them clearly.\n";
     if(handle)b+=`Original author: ${handle}\n`; b+=`What they shared: ${what}\n`;
     const why=val("rpWhy"); if(why)b+=`Why amplify: ${why}\n`;
-    return{brief:b,meta1:handle?"via "+handle:"",meta2:"",eyebrow:"Spotlight"};
+    return{brief:b,withImage:!!figure,meta1:handle?"via "+handle:"",meta2:"",eyebrow:"Spotlight"};
   }
   return{error:"Pick a content type."};
 }
@@ -490,6 +493,7 @@ Return ONLY valid JSON, no preamble, no code fences:
 {"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
   const content=[{type:"text",text:"Brief:\n\n"+built.brief}];
   if(built.withImage&&activeType==="reel"&&reelCover){content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:reelCover.split(",")[1]}});}
+  else if(built.withImage&&figure){content.push({type:"image",source:{type:"base64",media_type:figure.mediaType||"image/jpeg",data:figure.dataUrl.split(",")[1]}});}
   else if(built.withImage)photos.forEach(p=>content.push({type:"image",source:{type:"base64",media_type:p.mediaType||"image/jpeg",data:p.dataUrl.split(",")[1]}}));
   setLoading(true);
   try{
@@ -979,7 +983,7 @@ async function refreshReviewQueue(){
     state.textContent=data.items.length?`${data.items.length} submission${data.items.length===1?"":"s"} waiting`:"Nothing is waiting for review.";
     data.items.forEach(item=>{
       const card=document.createElement("div");card.className="review-card";
-      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span></div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
+      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${item.mediaFileId?' <span class="qcount">Image ready</span>':''}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
       card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId);
       card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed");
       card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected");};
@@ -992,7 +996,7 @@ function queueJsonp(action,params){
   return new Promise((resolve,reject)=>{
     const cb="igsReview_"+Date.now()+"_"+Math.random().toString(36).slice(2);
     const script=document.createElement("script");
-    const timer=setTimeout(()=>finish(new Error("The review queue did not respond.")),15000);
+    const timer=setTimeout(()=>finish(new Error("The review queue did not respond.")),action==="detail"?30000:15000);
     const finish=(err,data)=>{clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
     window[cb]=data=>finish(null,data);
     const q=new URLSearchParams({action,token:getManagerToken(),callback:cb,...params});
@@ -1011,7 +1015,7 @@ async function loadReviewSubmission(submissionId){
     await reviewStatus(submissionId,"Reviewing");
     const data=await queueJsonp("detail",{submissionId});
     if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
-    applyReviewSubmission(data.item);closeModal();toast("Submission loaded into Studio ✓");
+    applyReviewSubmission(data.item);closeModal();toast(data.item.imageBase64?"Submission and source image loaded ✓":"Submission loaded — no automatic source image was available");
   }catch(e){if(state)state.innerHTML=`<div class="err">${esc(e.message||e)}</div>`;}
 }
 function applyReviewSubmission(item){
