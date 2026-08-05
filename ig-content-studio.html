@@ -478,14 +478,15 @@ async function draft(){
   const built=buildBrief(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
   if(built.error){errBox.innerHTML=`<div class="err">${built.error}</div>`;return;}
   if(reviewSource){
-    built.brief+=`\nORIGINAL DEPARTMENT SUBMISSION:\nSubmitter: ${reviewSource.submitter||""}\nCredit: ${reviewSource.credit||""}\nTitle: ${reviewSource.title||""}\nDetails: ${reviewSource.details||""}\nLink: ${reviewSource.link||""}\n`;
+    const reviewDetails=reviewDetailsForDraft_(reviewSource);
+    built.brief+=`\nORIGINAL DEPARTMENT SUBMISSION:\nSubmitter: ${reviewSource.submitter||""}\nCredit: ${reviewSource.credit||""}\nTitle: ${reviewSource.title||""}\nDetails: ${reviewDetails}\nLink: ${reviewSource.link||""}\n`;
   }
   lastBuilt=built;
   const s=getSettings();
   const sys=`You are the social-media editor for ${s.dept}${s.handle?` (Instagram ${s.handle})`:""}, a university engineering department.
 You produce TWO things from each brief: (1) a feed CAPTION and (2) the short TEXT THAT GOES ON THE GRAPHIC ITSELF.
 Voice: ${s.voice}
-Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. No markdown. Emoji sparingly if it fits.
+Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. Treat the brief as the complete source material: do not ask the user to open a URL or supply facts, and omit unsupported specifics instead. No markdown. Emoji sparingly if it fits.
 Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
 Graphic text must be SHORT and legible on a phone-sized post: headline punchy (<= 8 words), subhead a single clause.
 Hashtags: use only relevant broad + niche/academic tags, no # symbol, max ${MAX_HASHTAGS}. Themes: ${s.hashtags}
@@ -1029,13 +1030,27 @@ function applyReviewSubmission(item){
     else figure={dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"};
   }
   renderTypes();renderForm();
-  const context=[item.title,item.details].filter(Boolean).join("\n\n");
+  const draftDetails=reviewDetailsForDraft_(item);
+  const context=[item.title,draftDetails].filter(Boolean).join("\n\n");
   if(activeType==="paper"){setField("doi",item.link);setField("paperText",context);setField("paperAngle",item.credit);}
-  if(activeType==="event"){setField("evTitle",item.title);setField("evDate",item.date);setField("evTime",item.time);setField("evLoc",item.location);setField("evDesc",item.details);setField("evLink",item.link);}
+  if(activeType==="event"){setField("evTitle",item.title);setField("evDate",item.date);setField("evTime",item.time);setField("evLoc",item.location);setField("evDesc",draftDetails);setField("evLink",item.link);}
   if(activeType==="photo")setField("photoNote",context);
   if(activeType==="reel"){setField("reelLink",item.videoLink);setField("reelNote",context);reelVideoLink=item.videoLink||"";}
-  if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy","Submitted by "+(item.submitter||"department member"));}
+  if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy",item.submitter==="Discovery Bot"?"Identified from an official source for department review":"Submitted by "+(item.submitter||"department member"));}
   window.scrollTo({top:0,behavior:"smooth"});
+}
+function reviewDetailsForDraft_(item){
+  const raw=String(item&&item.details||"").trim();
+  if(!raw)return "";
+  const marked=raw.match(/(?:^|\n)FACTS FOR DRAFT:\s*\n?([\s\S]*?)(?=\n+(?:REVIEW NOTE|IMAGE CREDIT|IMAGE SOURCE|IMAGE TYPE|RIGHTS CHECK|DISCOVERY MONITOR ID):|$)/i);
+  if(marked&&marked[1].trim())return marked[1].trim();
+  return raw
+    .replace(/This may feature a student, alumnus, program, team, or faculty member\.?/gi,"")
+    .split(/\r?\n/)
+    .filter(line=>!/^\s*(?:Open the original (?:article|page)|Verify final publication status|REVIEW NOTE:|IMAGE CREDIT:|IMAGE SOURCE:|IMAGE TYPE:|RIGHTS CHECK:|DISCOVERY MONITOR ID:)/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g,"\n\n")
+    .trim();
 }
 function setField(id,value){const el=document.getElementById(id);if(el)el.value=value||"";}
 

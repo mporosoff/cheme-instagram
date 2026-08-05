@@ -82,6 +82,37 @@ assert.equal(isGenericDiscoveryImageUrl_(
   "https://www.rochester.edu/newscenter/wp-content/uploads/2026/01/fea-catalyst-research-2000x1200.jpg"
 ), false, "a story-specific Newscenter feature image should remain eligible");
 
+const namedProfessorshipPost = {
+  title: { rendered: "URochester faculty appointed to named professorships" },
+  link: "https://www.rochester.edu/newscenter/rochester-named-professorships-jan-june-2026-713932/",
+  date_gmt: new Date().toISOString().replace(/\.\d{3}Z$/, ""),
+  excerpt: { rendered: "<p>Named positions celebrate faculty work.</p>" },
+  content: { rendered: [
+    "<h2>Named positions celebrate the work of faculty.</h2>",
+    "<hr>",
+    "<p>Yan Bai, a professor of economics, was appointed to a named position.</p>",
+    "<hr>",
+    "<p><a href='https://www.hajim.rochester.edu/che/people/faculty/lipomi-darren/'>Darren Lipomi</a>, a professor of chemical and sustainability engineering, has been appointed as the Arthur Gould Yates Professor of Engineering. He retains his appointment as chair of the Department of Chemical and Sustainability Engineering.</p>",
+    "<p>Lipomi's research interests include molecular engineering of electronic and electroactive polymers.</p>",
+    "<hr>",
+    "<p>Another professor in another department was appointed.</p>"
+  ].join("\n") },
+  _embedded: { "wp:featuredmedia": [{
+    source_url: "https://www.rochester.edu/newscenter/wp-content/uploads/2026/01/NewsCenter_seal_2000x1200-scaled.png",
+    caption: { rendered: "News Center" }
+  }] }
+};
+const namedFacts = newscenterFactsForDraft_(namedProfessorshipPost);
+assert.match(namedFacts, /Darren Lipomi/);
+assert.match(namedFacts, /Arthur Gould Yates Professor of Engineering/);
+assert.doesNotMatch(namedFacts, /Yan Bai/, "roundup extraction must omit unrelated appointments");
+const namedCandidate = newscenterCandidateFromPost_(namedProfessorshipPost,
+  "UR Chemical and Sustainability Engineering", "Official department-language match.", 105);
+assert.equal(namedCandidate.credit, "Darren Lipomi", "the matching faculty member should receive draft credit");
+assert.match(namedCandidate.details, /FACTS FOR DRAFT:\n[\s\S]*Arthur Gould Yates/);
+assert.doesNotMatch(namedCandidate.details, /Open the original article/i,
+  "drafting details must contain facts instead of an instruction the model cannot perform");
+
 const savedRows = [];
 global.getSheet_ = function() {
   return {
@@ -150,5 +181,42 @@ const backfillResult = backfillDiscoveryImages();
 assert.equal(backfillResult.added, 1);
 assert.match(backfillWrites[6], /IMAGE TYPE: Featured story image/);
 assert.deepEqual(backfillWrites[12], ["https://drive.google.com/file/d/test/view", "test-file-id"]);
+
+const oldNewscenterRow = new Array(20).fill("");
+oldNewscenterRow[1] = "Discovery Bot";
+oldNewscenterRow[4] = "URochester faculty appointed to named professorships";
+oldNewscenterRow[5] = "Official University of Rochester Newscenter item matched to department language.\n\nNamed positions celebrate faculty.\n\nOpen the original article and verify the department connection.\n\nIMAGE CREDIT: News Center\nIMAGE SOURCE: https://www.rochester.edu/newscenter/wp-content/uploads/2026/01/NewsCenter_seal_2000x1200-scaled.png\nIMAGE TYPE: Featured story image\nRIGHTS CHECK: Confirm credit.";
+oldNewscenterRow[9] = namedProfessorshipPost.link;
+oldNewscenterRow[11] = "https://drive.google.com/file/d/seal/view";
+oldNewscenterRow[12] = "seal-file-id";
+oldNewscenterRow[14] = "Rejected";
+const refreshWrites = {};
+global.getSheet_ = function() {
+  return {
+    getLastRow() { return 2; },
+    getRange(row, column) {
+      return {
+        getValues() { return [oldNewscenterRow]; },
+        setValue(value) { refreshWrites[column] = value; },
+        setValues(values) { refreshWrites[column] = values[0]; }
+      };
+    }
+  };
+};
+global.fetchText_ = function() { return JSON.stringify([namedProfessorshipPost]); };
+const refreshResult = refreshDiscoveryNewscenterDetails();
+assert.equal(refreshResult.updated, 1);
+assert.equal(refreshResult.genericImagesDetached, 1);
+assert.match(refreshWrites[6], /FACTS FOR DRAFT:\n[\s\S]*Darren Lipomi/);
+assert.doesNotMatch(refreshWrites[6], /IMAGE SOURCE:/,
+  "generic image metadata must be removed from repaired details");
+assert.deepEqual(refreshWrites[12], ["", ""], "the existing generic seal must be detached");
+
+const studioSource = fs.readFileSync(path.join(root, "ig-content-studio.html"), "utf8");
+assert.match(studioSource, /function reviewDetailsForDraft_\(item\)/,
+  "Content Studio must sanitize reviewer-only instructions before drafting");
+assert.match(studioSource, /const reviewDetails=reviewDetailsForDraft_\(reviewSource\)/);
+assert.doesNotMatch(studioSource, /Details: \$\{reviewSource\.details\|\|""\}/,
+  "raw Discovery details must never be appended to the model brief");
 
 console.log("Discovery tests passed");
