@@ -75,6 +75,12 @@ assert.equal(graphicalAbstractImage_(
 assert.equal(structuredDataImage_(
   '<script type="application/ld+json">{"@type":"NewsArticle","image":{"url":"https://example.edu/story.jpg"}}</script>'
 ), "https://example.edu/story.jpg", "structured NewsArticle imagery should be recognized");
+assert.equal(isGenericDiscoveryImageUrl_(
+  "https://www.rochester.edu/newscenter/wp-content/uploads/2026/01/NewsCenter_seal_2000x1200-scaled.png"
+), true, "the generic Newscenter seal must not be attached as story imagery");
+assert.equal(isGenericDiscoveryImageUrl_(
+  "https://www.rochester.edu/newscenter/wp-content/uploads/2026/01/fea-catalyst-research-2000x1200.jpg"
+), false, "a story-specific Newscenter feature image should remain eligible");
 
 const savedRows = [];
 global.getSheet_ = function() {

@@ -842,9 +842,13 @@ function commitMonitorState_(item) {
 function downloadDiscoveryImage_(candidate) {
   try {
     var pageMeta = findArticleImageMetadata_(candidate.link);
-    var imageUrl = absoluteUrl_(candidate.imageUrl || pageMeta.url || "", candidate.link);
+    var featuredUrl = absoluteUrl_(candidate.imageUrl || "", candidate.link);
+    var metadataUrl = absoluteUrl_(pageMeta.url || "", candidate.link);
+    var imageUrl = featuredUrl && !isGenericDiscoveryImageUrl_(featuredUrl) ? featuredUrl :
+      (metadataUrl && !isGenericDiscoveryImageUrl_(metadataUrl) ? metadataUrl : "");
     if (!imageUrl || !isSafePublicHttpUrl_(imageUrl)) return null;
-    var imageKind = candidate.imageUrl ? "Featured story image" : (pageMeta.kind || "Article preview image");
+    var imageKind = imageUrl === featuredUrl ? "Featured story image" :
+      (pageMeta.kind || "Article preview image");
 
     var response = fetchResponse_(imageUrl);
     var blob = response.getBlob();
@@ -879,6 +883,17 @@ function downloadDiscoveryImage_(candidate) {
     console.warn("No usable preview image for " + candidate.link + ": " + err);
     return null;
   }
+}
+
+/** Rejects common site furniture that is not useful story imagery. */
+function isGenericDiscoveryImageUrl_(url) {
+  var value = String(url || "").toLowerCase();
+  try { value = decodeURIComponent(value); } catch (err) {}
+  var path = value.replace(/[?#].*$/, "");
+  var fileName = path.split("/").pop() || "";
+  return /news[-_ ]?center[-_ ]?seal/.test(fileName) ||
+    /(?:^|[-_.])(logo|seal|favicon|site[-_]?icon|placeholder|default[-_]?image|avatar|sprite|branding)(?:[-_.]|$)/.test(fileName) ||
+    /(?:university|rochester)[-_ ]*(?:logo|seal)(?:[-_.]|$)/.test(fileName);
 }
 
 /**
