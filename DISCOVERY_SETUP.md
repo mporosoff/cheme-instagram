@@ -13,11 +13,13 @@ This optional add-on supplies the existing Instagram review queue with possible 
 
 See **[DISCOVERY_COVERAGE.md](DISCOVERY_COVERAGE.md)** for the complete faculty-by-faculty source table.
 
-The script adds a maximum of 25 new leads per run. Existing links/titles are skipped. Page-change state is saved only after its row is safely written, so leads deferred by the limit are retried during the next run. Every new row has status `New`, so it appears in the Content Studio's **Review queue** and follows the same review/approval path as supplied content.
+The script adds a maximum of 25 new leads per run. Existing links/titles are skipped. Page-change state is saved only after its row is safely written, so leads deferred by the limit are retried during the next run. Every new row has status `New`, so it appears in the Content Studio's **Review queue** and follows the same review/approval path as supplied content. For Newscenter stories, Discovery extracts the department- or faculty-matching section from the full article body and labels it `FACTS FOR DRAFT`; Content Studio sends only that factual section—not verification instructions or image metadata—to the caption model.
 
 When an article exposes a Newscenter featured image, graphical-abstract/publication metadata, a labeled graphical-abstract or TOC figure, structured article data, or a social-sharing image, the script downloads the best available candidate into a private **UR ChemE IG Discovery Media** Drive folder. Generic seals, logos, icons, placeholders, avatars, and branding assets are rejected. It records the article URL, direct image URL, image type, and best available creator/site credit in the row. Content Studio automatically loads the saved image, labels it as ready, uses it in the graphic, and adds the recorded image credit to the draft caption. The upload control remains available to replace it.
 
 After installing this version, optionally run `backfillDiscoveryImages()` from the Apps Script editor. It attempts to attach source images to up to 25 existing `Discovery Bot` rows that are still `New` or `Reviewing` and have no image. Run it again if its returned `remaining` count is above zero.
+
+If Newscenter leads were created by an older version, run `refreshDiscoveryNewscenterDetails()` once after installing. It repairs up to 25 old Newscenter rows at a time, regardless of their current review status, and does not change that status. It also detaches any generic Newscenter seal/logo already attached to a repaired row. Run it again only if its returned `remaining` count is above zero.
 
 The Rochester sources and Crossref are public and require no API key or paid account. Their records are only as accurate as the source page and publisher metadata, so the script deliberately asks a reviewer to verify every result.
 

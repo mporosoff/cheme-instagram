@@ -44,6 +44,7 @@ var DISCOVERY_CONFIG = {
   downloadThirdPartyImages: true,
   maxImageLookupsPerRun: 25,
   maxImageBackfillsPerRun: 25,
+  maxNewscenterDetailRefreshesPerRun: 25,
   maxImageBytes: 8 * 1024 * 1024,
   imageFolderName: "UR ChemE IG Discovery Media",
   sendDailySourceDigest: true,
@@ -496,7 +497,8 @@ function newscenterCandidateFromPost_(post, credit, detailsPrefix, score) {
   var media = embedded["wp:featuredmedia"] && embedded["wp:featuredmedia"][0] || {};
   var imageUrl = media.source_url || "";
   var imageCaption = stripHtml_(media.caption && media.caption.rendered || "");
-  var excerpt = truncate_(stripHtml_(post.excerpt && post.excerpt.rendered || ""), 700);
+  var facts = newscenterFactsForDraft_(post);
+  var facultyCredits = newscenterFacultyCredits_(facts);
   return {
     title: title,
     link: link,
@@ -504,12 +506,93 @@ function newscenterCandidateFromPost_(post, credit, detailsPrefix, score) {
     imageCredit: imageCaption || "University of Rochester Newscenter",
     date: published,
     type: "Shout-out",
-    credit: credit,
-    details: detailsPrefix + (excerpt ? "\n\n" + excerpt : "") +
-      "\n\nOpen the original article and verify the department connection, claims, and preferred image credit before drafting.",
+    credit: facultyCredits.length ? facultyCredits.join(", ") : credit,
+    details: newscenterDraftDetails_(post, detailsPrefix),
     source: "University of Rochester Newscenter",
     score: Number(score || 100) + relevanceBonus_(title)
   };
+}
+
+/**
+ * Carries the relevant source passage into Content Studio. Newscenter roundup
+ * articles often have a generic excerpt, while the department-specific facts
+ * are several sections down in the full WordPress body.
+ */
+function newscenterDraftDetails_(post, detailsPrefix) {
+  var facts = newscenterFactsForDraft_(post);
+  if (!facts) {
+    facts = truncate_(stripHtml_(post.excerpt && post.excerpt.rendered || ""), 1200) ||
+      stripHtml_(post.title && post.title.rendered || "");
+  }
+  return "DISCOVERY MATCH: " + String(detailsPrefix || "Official University of Rochester Newscenter item.") +
+    "\n\nFACTS FOR DRAFT:\n" + facts +
+    "\n\nREVIEW NOTE: Confirm the source wording, department connection, and preferred image credit before approval.";
+}
+
+function newscenterFactsForDraft_(post) {
+  var html = String(post && post.content && post.content.rendered || "");
+  var excerpt = truncate_(stripHtml_(post && post.excerpt && post.excerpt.rendered || ""), 1200);
+  if (!html) return excerpt;
+
+  // Roundups use horizontal rules between people/items. Selecting the whole
+  // matching section retains the person's name, appointment, and context.
+  var rawSections = html.split(/<hr\b[^>]*\/?\s*>/i);
+  if (rawSections.length > 1) {
+    var matchingSections = [];
+    for (var s = 0; s < rawSections.length; s++) {
+      var section = stripHtml_(rawSections[s]);
+      if (section && newscenterTextIsRelevant_(section)) matchingSections.push(section);
+    }
+    if (matchingSections.length) return truncate_(uniqueStrings_(matchingSections).join("\n\n"), 2800);
+  }
+
+  // Ordinary stories do not necessarily have section dividers. Preserve the
+  // matching paragraph plus one paragraph of context on either side.
+  var paragraphs = newscenterParagraphs_(html);
+  var selected = [];
+  for (var p = 0; p < paragraphs.length; p++) {
+    if (!newscenterTextIsRelevant_(paragraphs[p])) continue;
+    if (p > 0) selected.push(paragraphs[p - 1]);
+    selected.push(paragraphs[p]);
+    if (p + 1 < paragraphs.length) selected.push(paragraphs[p + 1]);
+  }
+  selected = uniqueStrings_(selected);
+  if (selected.length) return truncate_(selected.join("\n\n"), 2800);
+
+  // Official tag matches can occasionally omit the department phrase from the
+  // body. The excerpt and opening body paragraphs still provide usable facts.
+  return truncate_(uniqueStrings_([excerpt].concat(paragraphs.slice(0, 4))).join("\n\n"), 2800);
+}
+
+function newscenterParagraphs_(html) {
+  var withBreaks = String(html || "")
+    .replace(/<br\b[^>]*>/gi, "\n")
+    .replace(/<\/(?:p|h[1-6]|li|blockquote|figcaption|div)>/gi, "\n")
+    .replace(/<hr\b[^>]*\/?\s*>/gi, "\n");
+  var raw = withBreaks.split(/\n+/);
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var paragraph = stripHtml_(raw[i]);
+    if (paragraph.length >= 25) out.push(paragraph);
+  }
+  return uniqueStrings_(out);
+}
+
+function newscenterTextIsRelevant_(text) {
+  if (textMentionsDepartment_(text)) return true;
+  for (var i = 0; i < DISCOVERY_CONFIG.faculty.length; i++) {
+    if (textMentionsFaculty_(text, DISCOVERY_CONFIG.faculty[i])) return true;
+  }
+  return false;
+}
+
+function newscenterFacultyCredits_(facts) {
+  var out = [];
+  for (var i = 0; i < DISCOVERY_CONFIG.faculty.length; i++) {
+    var faculty = DISCOVERY_CONFIG.faculty[i];
+    if (textMentionsFaculty_(facts, faculty)) out.push(facultyDisplayName_(faculty));
+  }
+  return uniqueStrings_(out);
 }
 
 /**
@@ -945,6 +1028,105 @@ function backfillDiscoveryImages() {
   var result = { ok: true, checked: checked, added: added, remaining: remaining };
   console.log(JSON.stringify(result));
   return result;
+}
+
+/**
+ * One-time/manual repair for Newscenter leads created before full article facts
+ * were stored. It updates Details for any status without changing that status,
+ * and detaches a known generic seal/logo from the queue row. Safe to repeat.
+ */
+function refreshDiscoveryNewscenterDetails() {
+  var sheet = getSheet_();
+  if (sheet.getLastRow() < 2) {
+    return { ok: true, checked: 0, updated: 0, genericImagesDetached: 0, remaining: 0 };
+  }
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+  var limit = Number(DISCOVERY_CONFIG.maxNewscenterDetailRefreshesPerRun || 25);
+  var checked = 0;
+  var updated = 0;
+  var detached = 0;
+  var remaining = 0;
+
+  for (var i = values.length - 1; i >= 0; i--) {
+    var row = values[i];
+    var details = String(row[5] || "");
+    var link = String(row[9] || "");
+    if (String(row[1] || "") !== "Discovery Bot" ||
+        !/^https:\/\/www\.rochester\.edu\/newscenter\//i.test(link) ||
+        /(?:^|\n)FACTS FOR DRAFT:/i.test(details)) continue;
+    if (checked >= limit) {
+      remaining++;
+      continue;
+    }
+
+    checked++;
+    try {
+      var post = fetchNewscenterPostForLink_(link);
+      if (!post) continue;
+      var nextDetails = newscenterDraftDetails_(post, existingNewscenterMatchNote_(details));
+      var metadata = preservedDiscoveryMetadata_(details);
+      if (metadata) nextDetails += "\n\n" + metadata;
+      sheet.getRange(i + 2, 6).setValue(truncate_(nextDetails, 6000));
+      updated++;
+
+      var imageSource = discoveryImageSource_(details);
+      if (imageSource && isGenericDiscoveryImageUrl_(imageSource)) {
+        sheet.getRange(i + 2, 12, 1, 2).setValues([["", ""]]);
+        detached++;
+      }
+    } catch (err) {
+      console.warn("Could not refresh Newscenter details for " + link + ": " + err);
+    }
+  }
+
+  var result = {
+    ok: true,
+    checked: checked,
+    updated: updated,
+    genericImagesDetached: detached,
+    remaining: remaining
+  };
+  console.log(JSON.stringify(result));
+  return result;
+}
+
+function fetchNewscenterPostForLink_(link) {
+  var value = String(link || "").replace(/[?#].*$/, "");
+  var idMatch = value.match(/-(\d+)\/?$/);
+  var slugMatch = value.match(/\/newscenter\/([^/]+)\/?$/i);
+  var url = DISCOVERY_CONFIG.rochesterNewsApiUrl + "?per_page=1&_embed=1";
+  if (idMatch) url += "&include=" + encodeURIComponent(idMatch[1]);
+  else if (slugMatch) url += "&slug=" + encodeURIComponent(slugMatch[1]);
+  else return null;
+  var posts = JSON.parse(fetchText_(url)) || [];
+  return posts.length ? posts[0] : null;
+}
+
+function existingNewscenterMatchNote_(details) {
+  var value = String(details || "").trim();
+  var marked = value.match(/(?:^|\n)DISCOVERY MATCH:\s*([^\n]+)/i);
+  if (marked) return marked[1].trim();
+  var firstParagraph = value.split(/\n\s*\n/)[0].trim();
+  return firstParagraph || "Official University of Rochester Newscenter item.";
+}
+
+function discoveryImageSource_(details) {
+  var match = String(details || "").match(/(?:^|\n)IMAGE SOURCE:\s*(\S+)/i);
+  return match ? match[1].trim() : "";
+}
+
+function preservedDiscoveryMetadata_(details) {
+  var value = String(details || "");
+  var imageSource = discoveryImageSource_(value);
+  var keepImage = !imageSource || !isGenericDiscoveryImageUrl_(imageSource);
+  var lines = value.split(/\r?\n/);
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (/^DISCOVERY MONITOR ID:/i.test(line)) out.push(line);
+    if (keepImage && /^(?:IMAGE CREDIT|IMAGE SOURCE|IMAGE TYPE|RIGHTS CHECK):/i.test(line)) out.push(line);
+  }
+  return uniqueStrings_(out).join("\n");
 }
 
 function findArticleImageMetadata_(articleUrl) {
