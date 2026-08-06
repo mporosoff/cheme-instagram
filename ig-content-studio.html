@@ -251,8 +251,8 @@ const STYLE_PRESETS={
     headline:"'Inter'",body:"'Inter'",label:"'Inter'",headlineWeight:"900"
   },
   light:{
-    name:"Ever Better Light",desc:"Airy serif + navy framing",motif:"lens",
-    bg:"#FFF3B1",fg:"#001E5F",muted:"#27447D",accent:"#FFD82B",accent2:"#0066FD",panel:"#FFFFFF",
+    name:"Ever Better Light",desc:"Airy serif + clean ivory field",motif:"lens",
+    bg:"#FBFAF6",fg:"#001E5F",muted:"#40577F",accent:"#F4D64E",accent2:"#0066FD",panel:"#FFFFFF",
     headline:"Georgia",body:"'Inter'",label:"'Inter'",headlineWeight:"700"
   },
   classic:{
@@ -671,8 +671,8 @@ function drawBrandBackdrop(ctx,s,W,H){
     ctx.beginPath();ctx.moveTo(W*.62,-40);ctx.lineTo(W+90,H*.34);ctx.lineTo(W*.78,H*.57);ctx.lineTo(W*.45,H*.20);ctx.closePath();ctx.fill();
     ctx.restore();
   }else if(s.motif==="lens"){
-    ctx.save();ctx.strokeStyle=s.accent2;ctx.lineWidth=26;roundRect(ctx,W*.54,-90,W*.62,H*.58,120);ctx.stroke();ctx.restore();
-    ctx.fillStyle=hexRgba(s.accent,.55);ctx.fillRect(0,H-26,W,26);
+    ctx.save();ctx.globalAlpha=.035;ctx.fillStyle=s.accent2;
+    ctx.beginPath();ctx.moveTo(W*.76,0);ctx.lineTo(W,0);ctx.lineTo(W,H*.20);ctx.closePath();ctx.fill();ctx.restore();
   }
 }
 function drawBrandHeader(ctx,g,s,W,P,logo){
@@ -688,19 +688,31 @@ function drawBrandHeader(ctx,g,s,W,P,logo){
   ctx.fillText("DEPARTMENT OF CHEMICAL &",W-P,51);
   ctx.fillText("SUSTAINABILITY ENGINEERING",W-P,78);ctx.textAlign="left";
   const ruleX=s.id==="cobalt"?350:P;
-  ctx.fillStyle=s.accent;ctx.fillRect(ruleX,138,W-P-ruleX,7);
+  ctx.fillStyle=s.accent;ctx.fillRect(ruleX,138,W-P-ruleX,s.id==="light"?4:7);
 }
 function drawBrandFooter(ctx,g,s,W,H,P){
+  if(s.id==="light"){
+    const meta1=clip(ctx,g.meta1||g.handle||"",W-P*2,`700 30px ${s.body}`);
+    ctx.fillStyle=s.accent;ctx.fillRect(P,H-170,76,7);
+    ctx.fillStyle=s.fg;ctx.font=`700 30px ${s.body}`;ctx.fillText(meta1,P,H-126);
+    if(g.meta2){
+      const meta2=clip(ctx,g.meta2,W-P*2,`500 25px ${s.body}`);
+      ctx.fillStyle=s.muted;ctx.font=`500 25px ${s.body}`;ctx.fillText(meta2,P,H-78);
+    }
+    return;
+  }
   const y=H-196;
   angularPanel(ctx,0,y,W*.72,112,66,s.accent);
   const meta1Font=`700 30px ${s.body}`;
   const meta1=clip(ctx,g.meta1||g.handle||"",W*.72-P-72,meta1Font);
   ctx.fillStyle="#001E5F";ctx.font=`700 30px ${s.body}`;
   ctx.fillText(meta1,P,y+35);
-  const meta2Font=`600 25px ${s.body}`;
-  const meta2=clip(ctx,g.meta2||g.dept||"",W-P*2,meta2Font);
-  ctx.fillStyle=s.fg;ctx.font=`600 25px ${s.body}`;
-  ctx.fillText(meta2,P,H-59);
+  if(g.meta2){
+    const meta2Font=`600 25px ${s.body}`;
+    const meta2=clip(ctx,g.meta2,W-P*2,meta2Font);
+    ctx.fillStyle=s.fg;ctx.font=`600 25px ${s.body}`;
+    ctx.fillText(meta2,P,H-59);
+  }
 }
 function drawBrandPhoto(ctx,g,fig,W,H,P,reel,s,logo){
   if(fig)framedImageDraw(ctx,fig,0,0,W,H,g.imageFit||"cover");else{ctx.fillStyle=s.bg;ctx.fillRect(0,0,W,H);}
@@ -763,10 +775,10 @@ function drawBrandCard(ctx,g,fig,W,H,P,reel,s,logo){
     const panelY=H-222;
     angularPanel(ctx,0,panelY,W,150,72,s.accent);
     ctx.fillStyle="#001E5F";ctx.font=`700 38px ${s.body}`;ctx.fillText(clip(ctx,g.meta1||"DATE & TIME",W-P*2,`700 38px ${s.body}`),P,panelY+29);
-    ctx.font=`600 28px ${s.body}`;ctx.fillText(clip(ctx,g.meta2||g.dept||"",W-P*2,`600 28px ${s.body}`),P,panelY+85);
+    if(g.meta2){ctx.font=`600 28px ${s.body}`;ctx.fillText(clip(ctx,g.meta2,W-P*2,`600 28px ${s.body}`),P,panelY+85);}
     return;
   }
-  let y=160;
+  let y=s.id==="cobalt"?190:160;
   ctx.font=`700 27px ${s.label}`;ctx.fillStyle=s.id==="light"?s.accent2:s.accent;ctx.fillText((g.eyebrow||"NEW PUBLICATION").toUpperCase(),P,y);y+=58;
   const hasFig=!!fig;
   const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:hasFig?220:330,weight:s.headlineWeight,family:s.headline,max:hasFig?70:88,min:40,lh:1.04});
