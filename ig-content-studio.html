@@ -91,6 +91,9 @@
   .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
   .tag{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:6px;padding:3px 8px;}
   .tag.on{background:var(--glow-bg);border:1px solid var(--glow-soft);color:#8A2B0C;cursor:pointer;}
+  .tag-editor{display:flex;gap:8px;align-items:center;margin-top:10px;}
+  .tag-editor input{flex:1;min-width:0;}
+  .tag-editor .btn{white-space:nowrap;}
   .counts{display:flex;gap:16px;margin-top:12px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--slate);}
   .counts b{color:var(--ink);font-weight:500;}
   .counts .warn{color:var(--glow);}
@@ -489,7 +492,7 @@ Voice: ${s.voice}
 Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. Treat the brief as the complete source material: do not ask the user to open a URL or supply facts, and omit unsupported specifics instead. No markdown. Emoji sparingly if it fits.
 Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
 Graphic text must be SHORT and legible on a phone-sized post: headline punchy (<= 8 words), subhead a single clause.
-Hashtags: use only relevant broad + niche/academic tags, no # symbol, max ${MAX_HASHTAGS}. Themes: ${s.hashtags}
+Hashtags: return no more than ${MAX_HASHTAGS}, without the # symbol. Every hashtag must be directly supported by a subject, field, method, institution, or content type stated in the brief. Do not infer an unrelated research area from the department or from the optional theme pool—for example, never use Catalysis unless the brief actually mentions a catalyst or catalysis. Optional theme pool (suggestions only, not a checklist): ${s.hashtags}
 Return ONLY valid JSON, no preamble, no code fences:
 {"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
   const content=[{type:"text",text:"Brief:\n\n"+built.brief}];
@@ -522,8 +525,37 @@ function withReviewImageCredit(caption){
   if(!credit||credited)return text;
   return text+(text?"\n\n":"")+"📷 "+credit;
 }
+function cleanHashtag_(value){
+  return String(value||"").trim().replace(/^#+/,"").replace(/[^A-Za-z0-9_]/g,"").slice(0,60);
+}
+function hashtagTokens_(tag){
+  return String(tag||"").replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/_/g," ").toLowerCase().split(/\s+/).filter(Boolean);
+}
+function hashtagSupportedByBrief_(tag,brief){
+  const compact=cleanHashtag_(tag).toLowerCase();
+  const broad=new Set(["chemicalengineering","engineering","research","stem","science","urochester","universityofrochester","urcheme","highereducation"]);
+  if(broad.has(compact))return true;
+  const generic=new Set(["research","science","engineering","university","higher","education","study","studies"]);
+  const tokens=hashtagTokens_(tag).filter(token=>token.length>=4&&!generic.has(token));
+  if(!tokens.length)return false;
+  const source=String(brief||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ");
+  return tokens.some(token=>{
+    let stem=token;
+    if(/ies$/.test(stem))stem=stem.slice(0,-3)+"y";
+    else if(/s$/.test(stem)&&!/(ss|us|is)$/.test(stem))stem=stem.slice(0,-1);
+    return source.includes(stem.slice(0,Math.min(6,stem.length)));
+  });
+}
+function filterDraftHashtags_(values,brief){
+  const out=[],seen=new Set();
+  (Array.isArray(values)?values:[]).forEach(value=>{
+    const tag=cleanHashtag_(value),key=tag.toLowerCase();
+    if(tag&&!seen.has(key)&&hashtagSupportedByBrief_(tag,brief)&&out.length<MAX_HASHTAGS){seen.add(key);out.push(tag);}
+  });
+  return out;
+}
 function initOutput(p,built){
-  current={caption:withReviewImageCredit(p.caption||""),hashtags:(p.hashtags||[]).map(h=>String(h).replace(/^#/,"")).slice(0,MAX_HASHTAGS),alt_text:p.alt_text||"",type:activeType};
+  current={caption:withReviewImageCredit(p.caption||""),hashtags:filterDraftHashtags_(p.hashtags,built.brief),alt_text:p.alt_text||"",type:activeType};
   const s=getSettings();
   const fallbackHeadline=built.headlineHint||(reviewSource&&reviewSource.title)||"";
   const graphicHeadline=p.headline||fallbackHeadline;
@@ -555,16 +587,43 @@ function renderCaptionTab(){
   a.innerHTML=`<textarea class="caption-out" id="capOut"></textarea>
     <div class="counts"><span><b id="charCount">0</b> chars <span id="charNote"></span></span><span><b id="tagCount">0</b>/${MAX_HASHTAGS} tags</span></div>
     <div class="tags" id="tagBox"></div>
+    <div class="tag-editor"><input type="text" id="tagInput" maxlength="160" placeholder="Add #EnergyStorage or BatteryResearch" aria-label="Add hashtags"><button class="btn sm" id="addTag">Add hashtag</button></div>
+    <span class="hint">Add one or several tags separated by spaces or commas. Click a tag above to remove it.</span>
     <div class="alt"><span class="lab">Alt text</span><span id="altText"></span></div>
     <div class="out-acts"><button class="btn" id="copyCap">Copy caption</button><button class="btn" id="copyAll">Copy caption + tags</button><button class="btn ghost" id="regen">Regenerate</button></div>`;
   const cap=document.getElementById("capOut");cap.value=current.caption;cap.oninput=()=>{current.caption=cap.value;updateCounts();};
   document.getElementById("altText").textContent=current.alt_text||"—";
   renderTags();updateCounts();
+  const tagInput=document.getElementById("tagInput");
+  document.getElementById("addTag").onclick=addHashtagsFromInput_;
+  tagInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addHashtagsFromInput_();}};
   document.getElementById("copyCap").onclick=()=>copy(current.caption,"Caption copied");
   document.getElementById("copyAll").onclick=()=>copy(current.caption+"\n\n"+current.hashtags.map(h=>"#"+h).join(" "),"Copied");
   document.getElementById("regen").onclick=draft;
 }
-function renderTags(){const box=document.getElementById("tagBox");if(!box)return;box.innerHTML="";current.hashtags.forEach((h,i)=>{const s=document.createElement("span");s.className="tag on";s.textContent="#"+h;s.title="Remove";s.onclick=()=>{current.hashtags.splice(i,1);renderTags();updateCounts();};box.appendChild(s);});}
+function addHashtagsFromInput_(){
+  const input=document.getElementById("tagInput");if(!input)return;
+  const values=input.value.split(/[\s,]+/).filter(Boolean);let added=0;
+  for(const value of values){
+    const tag=cleanHashtag_(value);if(!tag)continue;
+    if(current.hashtags.some(existing=>existing.toLowerCase()===tag.toLowerCase()))continue;
+    if(current.hashtags.length>=MAX_HASHTAGS)break;
+    current.hashtags.push(tag);added++;
+  }
+  input.value="";renderTags();updateCounts();
+  if(!added&&current.hashtags.length>=MAX_HASHTAGS)toast(`Maximum ${MAX_HASHTAGS} hashtags — remove one before adding another`);
+}
+function renderTags(){
+  const box=document.getElementById("tagBox");if(!box)return;box.innerHTML="";
+  current.hashtags.forEach((h,i)=>{
+    const s=document.createElement("span");s.className="tag on";s.textContent="#"+h+" ×";s.title="Click to remove";
+    s.onclick=()=>{current.hashtags.splice(i,1);renderTags();updateCounts();};box.appendChild(s);
+  });
+  const full=current.hashtags.length>=MAX_HASHTAGS;
+  const input=document.getElementById("tagInput"),button=document.getElementById("addTag");
+  if(input)input.disabled=full;
+  if(button)button.disabled=full;
+}
 function updateCounts(){const cc=document.getElementById("charCount");if(!cc)return;const n=current.caption.length;cc.textContent=n;const note=document.getElementById("charNote");if(n>2200){note.textContent="(over IG's 2,200 limit)";note.className="warn";}else if(n>300){note.textContent="(long — shorter often reaches further)";note.className="";}else{note.textContent="";note.className="";}const tc=document.getElementById("tagCount");if(tc)tc.textContent=current.hashtags.length;}
 
 function renderGraphicTab(){
