@@ -751,9 +751,9 @@ function drawBrandHeader(ctx,g,s,W,P,logo){
   }else{
     ctx.font=`700 24px ${s.label}`;ctx.fillStyle=s.fg;ctx.fillText("UNIVERSITY OF ROCHESTER",P,62);
   }
-  ctx.textAlign="right";ctx.font=`600 18px ${s.label}`;ctx.fillStyle=s.id==="light"?s.fg:s.muted;
-  ctx.fillText("DEPARTMENT OF CHEMICAL &",W-P,51);
-  ctx.fillText("SUSTAINABILITY ENGINEERING",W-P,78);ctx.textAlign="left";
+  ctx.textAlign="right";ctx.font=`600 25px ${s.body}`;ctx.fillStyle=s.id==="light"?s.fg:s.muted;
+  ctx.fillText("Department of Chemical &",W-P,43);
+  ctx.fillText("Sustainability Engineering",W-P,77);ctx.textAlign="left";
   const ruleX=s.id==="cobalt"?350:P;
   ctx.fillStyle=s.accent;ctx.fillRect(ruleX,138,W-P-ruleX,s.id==="light"?4:7);
 }
