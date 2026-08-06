@@ -103,22 +103,37 @@ global.DriveApp = {
     };
   }
 };
-const detail = getReviewDetail_("submission-first", true);
+const detail = getReviewDetail_("submission-first", true, false);
 assert.equal(statusWrite, "Reviewing", "detail load should mark Reviewing in the same request");
 assert.equal(detail.status, "Reviewing");
-assert.equal(bytesReads, 1, "image bytes should be read only once before base64 encoding");
-assert.equal(detail.imageBase64, "AQIDBA==");
+assert.equal(bytesReads, 0, "the fast detail response must not wait for image bytes");
+assert.equal(detail.imageBase64, undefined);
+
+const media = getReviewMedia_("submission-first");
+assert.equal(bytesReads, 1, "the separate media request should read image bytes once");
+assert.equal(media.submissionId, "submission-first");
+assert.equal(media.imageBase64, "AQIDBA==");
+
+const legacyDetail = getReviewDetail_("submission-first", false);
+assert.equal(legacyDetail.imageBase64, "AQIDBA==",
+  "older Studio builds should continue receiving inline media until upgraded");
 
 const studioSource = fs.readFileSync(path.join(root, "ig-content-studio.html"), "utf8");
-assert.match(studioSource, /queueJsonp\("detail",\{submissionId,markReviewing:"1"\}\)/,
-  "Studio load should combine detail retrieval and the Reviewing update");
+assert.match(studioSource, /queueJsonp\("detail",\{submissionId,markReviewing:"1",includeMedia:"0"\}\)/,
+  "Studio load should request metadata without blocking on image transfer");
+assert.match(studioSource, /queueJsonp\("media",\{submissionId\}\)/,
+  "source media should load independently after the Studio is populated");
+assert.match(studioSource, /if\(reviewQueueListPromise\)return reviewQueueListPromise/,
+  "reopening the queue must reuse an in-flight list request");
+assert.match(studioSource, /refreshReviewQueue\(!!reviewQueueItemsCache\)/,
+  "reopening the queue should show the most recent cards immediately");
 assert.match(studioSource, /queueJsonp\("update",\{submissionId,status\}\)/,
   "review decisions should use one acknowledged JSONP update");
 assert.match(studioSource, /unknown action[\s\S]*legacyReviewStatus_\(submissionId,status\)/i,
   "the hosted Studio must remain compatible until the new Apps Script version is deployed");
 assert.doesNotMatch(studioSource, /setTimeout\(refreshReviewQueue,500\)/,
   "review decisions must not trigger a competing full queue reload");
-assert.match(studioSource, /action==="detail"\?90000:45000/,
-  "timeouts should allow for Apps Script cold starts and private Drive media");
+assert.match(studioSource, /action==="media"\?120000:\(action==="detail"\?90000:45000\)/,
+  "timeouts should separate private Drive media from the fast queue operations");
 
 console.log("Workflow tests passed");

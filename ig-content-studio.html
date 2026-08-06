@@ -290,6 +290,7 @@ const TYPES=[
   {id:"reel",label:"Reel",icon:'<rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h18M8 4l2.5 4M13 4l2.5 4" stroke="currentColor" stroke-width="1.6"/><path d="M10 12.5v3l3-1.5z" fill="currentColor"/>'}
 ];
 let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="", reviewSource=null;
+let reviewQueueItemsCache=null, reviewQueueListPromise=null, reviewQueueGeneration=0, reviewMediaLoadId=0;
 
 function renderTypes(){
   const c=document.getElementById("types");c.innerHTML="";
@@ -353,14 +354,21 @@ function renderForm(){
 function renderLoadedReviewBanner(){
   if(!reviewSource)return;
   const a=document.getElementById("formArea");if(!a)return;
+  const existing=a.querySelector(".loaded-review");if(existing)existing.remove();
   const box=document.createElement("div");box.className="meta-card loaded-review";
-  const imageState=reviewSource.imageBase64?"Source image loaded automatically":(reviewSource.mediaError||"No automatic source image found; upload remains optional");
-  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><button type="button">Clear</button>`;
-  box.querySelector("button").onclick=()=>{reviewSource=null;renderForm();};
+  const imageState=reviewSource.imageBase64?"Source image loaded automatically":(reviewSource.mediaPending?"Source image is loading in the background":(reviewSource.mediaError||"No automatic source image found; upload remains optional"));
+  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><div class="actions">${reviewSource.mediaError&&reviewSource.mediaFileId?'<button type="button" data-a="retry-media">Retry image</button>':""}<button type="button" data-a="clear-review">Clear</button></div>`;
+  const clear=box.querySelector('[data-a="clear-review"]');if(clear)clear.onclick=()=>{reviewMediaLoadId++;reviewSource=null;renderForm();};
+  const retry=box.querySelector('[data-a="retry-media"]');if(retry)retry.onclick=()=>loadReviewMedia_(reviewSource.submissionId,true);
   a.prepend(box);
+}
+function cancelPendingReviewMedia_(){
+  reviewMediaLoadId++;
+  if(reviewSource&&reviewSource.mediaPending){reviewSource.mediaPending=false;reviewSource.mediaError="";renderLoadedReviewBanner();}
 }
 function handleReel(f){
   if(!f||!f.type.startsWith("video/"))return;
+  cancelPendingReviewMedia_();
   const drop=document.getElementById("reelDrop"); if(drop)drop.textContent="Reading the clip…";
   grabFrame(f).then(url=>{
     reelCover=url;
@@ -400,12 +408,12 @@ function wireFigure(){
   fi.onchange=e=>readFigure(e.target.files[0]);
   renderFigThumb();
 }
-function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; const r=new FileReader(); r.onload=()=>{figure={dataUrl:r.result,name:f.name,mediaType:f.type};renderFigThumb();if(currentGraphic){currentGraphic.figure=figure.dataUrl;drawCard();}}; r.readAsDataURL(f); }
+function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; cancelPendingReviewMedia_(); const r=new FileReader(); r.onload=()=>{figure={dataUrl:r.result,name:f.name,mediaType:f.type};renderFigThumb();if(currentGraphic){currentGraphic.figure=figure.dataUrl;drawCard();}}; r.readAsDataURL(f); }
 function renderFigThumb(){ const t=document.getElementById("figThumb"); if(!t)return; t.innerHTML=""; if(figure){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${figure.dataUrl}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{figure=null;renderFigThumb();if(currentGraphic){currentGraphic.figure=null;drawCard();}};t.appendChild(d);} }
 function renderPaperMeta(){const box=document.getElementById("paperMetaBox");if(!box||!paperMeta)return;box.innerHTML=`<div class="meta-card"><div class="t">${esc(paperMeta.title)}</div><div class="m">${esc(paperMeta.authors)}${paperMeta.journal?" · "+esc(paperMeta.journal):""}${paperMeta.year?" · "+paperMeta.year:""}</div></div>`;}
 
 /* ===== photo (becomes the post) ===== */
-function handlePhoto(list){const f=list[0];if(!f||!f.type.startsWith("image/"))return;const r=new FileReader();r.onload=()=>{photos=[{dataUrl:r.result,name:f.name,mediaType:f.type}];renderThumbs();};r.readAsDataURL(f);}
+function handlePhoto(list){const f=list[0];if(!f||!f.type.startsWith("image/"))return;cancelPendingReviewMedia_();const r=new FileReader();r.onload=()=>{photos=[{dataUrl:r.result,name:f.name,mediaType:f.type}];renderThumbs();};r.readAsDataURL(f);}
 function renderThumbs(){const t=document.getElementById("thumbs");if(!t)return;t.innerHTML="";photos.forEach((p,i)=>{const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${p.dataUrl}" alt=""><button>×</button>`;d.querySelector("button").onclick=()=>{photos.splice(i,1);renderThumbs();};t.appendChild(d);});}
 
 /* ===== DOI via Crossref (slash-safe) ===== */
@@ -1040,31 +1048,52 @@ function openReviewQueue(){
   if(!getManagerToken()){openReviewAuth();return;}
   modal(`<h2>Department content review</h2><p>Submissions and discovery leads marked <b>New</b> or <b>Reviewing</b> appear here.</p><div id="reviewState" class="qempty">Loading submissions…</div><div class="review-grid" id="reviewGrid"></div><div class="out-acts"><button class="btn ghost" id="forgetReviewToken">Forget manager token</button><button class="btn" id="closeReview">Close</button></div>`,true);
   document.getElementById("closeReview").onclick=closeModal;
-  document.getElementById("forgetReviewToken").onclick=()=>{forgetManagerToken();closeModal();toast("Manager token removed");};
-  refreshReviewQueue();
+  document.getElementById("forgetReviewToken").onclick=()=>{reviewQueueGeneration++;reviewQueueItemsCache=null;reviewQueueListPromise=null;forgetManagerToken();closeModal();toast("Manager token removed");};
+  refreshReviewQueue(!!reviewQueueItemsCache);
 }
 function openReviewAuth(){
   modal(`<h2>Connect the private review queue</h2><p>Paste the manager token printed when you ran <code>initializeWorkflow()</code> in Apps Script.</p><label class="fld"><span class="lab">Manager token</span><input type="password" id="reviewToken" autocomplete="off"></label><label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;cursor:pointer"><input type="checkbox" id="rememberReviewToken" checked style="margin-top:3px"><span><b>Remember on this browser</b><br><span class="hint">Recommended only on your private computer. Uncheck this on a shared device.</span></span></label><div class="out-acts"><button class="btn primary" id="saveReviewToken">Connect</button><button class="btn ghost" id="cancelReview">Cancel</button></div>`);
   document.getElementById("saveReviewToken").onclick=()=>{const token=val("reviewToken");if(!token)return;setManagerToken(token,document.getElementById("rememberReviewToken").checked);closeModal();openReviewQueue();};
   document.getElementById("cancelReview").onclick=closeModal;
 }
-async function refreshReviewQueue(){
+function renderReviewItems_(items,checking){
   const state=document.getElementById("reviewState"),grid=document.getElementById("reviewGrid");if(!state||!grid)return;
-  state.textContent="Loading submissions…";grid.innerHTML="";
+  const list=Array.isArray(items)?items:[];
+  state.textContent=(list.length?`${list.length} submission${list.length===1?"":"s"} waiting`:"Nothing is waiting for review.")+(checking?" · checking for updates…":"");
+  grid.innerHTML="";
+  list.forEach(item=>{
+    const card=document.createElement("div");card.className="review-card";card.dataset.submissionId=item.submissionId||"";
+    card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${item.mediaFileId?' <span class="qcount">Image ready</span>':''}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
+    card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId,card);
+    card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed",card);
+    card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected",card);};
+    grid.appendChild(card);
+  });
+}
+function getReviewList_(){
+  if(reviewQueueListPromise)return reviewQueueListPromise;
+  const tracked=queueJsonp("list",{}).then(data=>{
+    if(reviewQueueListPromise===tracked)reviewQueueListPromise=null;return data;
+  },error=>{
+    if(reviewQueueListPromise===tracked)reviewQueueListPromise=null;throw error;
+  });
+  reviewQueueListPromise=tracked;return tracked;
+}
+async function refreshReviewQueue(preserveExisting){
+  const state=document.getElementById("reviewState"),grid=document.getElementById("reviewGrid");if(!state||!grid)return;
+  const generation=reviewQueueGeneration;
+  if(preserveExisting&&reviewQueueItemsCache)renderReviewItems_(reviewQueueItemsCache,true);
+  else{state.textContent="Loading submissions…";grid.innerHTML="";}
   try{
-    const data=await queueJsonp("list",{});
+    const data=await getReviewList_();
+    if(generation!==reviewQueueGeneration)return;
     if(!data.ok)throw new Error(data.error||"Review queue failed");
-    state.textContent=data.items.length?`${data.items.length} submission${data.items.length===1?"":"s"} waiting`:"Nothing is waiting for review.";
-    data.items.forEach(item=>{
-      const card=document.createElement("div");card.className="review-card";
-      card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${item.mediaFileId?' <span class="qcount">Image ready</span>':''}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
-      card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId,card);
-      card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed",card);
-      card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected",card);};
-      grid.appendChild(card);
-    });
+    reviewQueueItemsCache=Array.isArray(data.items)?data.items:[];
+    if(state.isConnected&&grid.isConnected)renderReviewItems_(reviewQueueItemsCache,false);
   }catch(e){
-    state.innerHTML=`<div class="err">${esc(reviewQueueErrorMessage_(e))}<br><button class="btn sm" id="retryReviewQueue" style="margin-top:10px">Try again</button></div>`;
+    if(!state.isConnected||!grid.isConnected)return;
+    if(reviewQueueItemsCache)renderReviewItems_(reviewQueueItemsCache,false);
+    state.innerHTML=`<div class="err">${reviewQueueItemsCache?"Showing the most recently loaded queue. ":""}${esc(reviewQueueErrorMessage_(e))}<br><button class="btn sm" id="retryReviewQueue" style="margin-top:10px">Try again</button></div>`;
     const retry=document.getElementById("retryReviewQueue");if(retry)retry.onclick=refreshReviewQueue;
   }
 }
@@ -1073,9 +1102,9 @@ function queueJsonp(action,params){
   return new Promise((resolve,reject)=>{
     const cb="igsReview_"+Date.now()+"_"+Math.random().toString(36).slice(2);
     const script=document.createElement("script");
-    const timeoutMs=action==="detail"?90000:45000;
+    const timeoutMs=action==="media"?120000:(action==="detail"?90000:45000);
     let settled=false;
-    const timer=setTimeout(()=>finish(new Error(action==="detail"?"Loading the submission and image timed out.":"The review queue request timed out.")),timeoutMs);
+    const timer=setTimeout(()=>finish(new Error(action==="media"?"The source image timed out.":(action==="detail"?"Loading the submission timed out.":"The review queue request timed out."))),timeoutMs);
     const finish=(err,data)=>{if(settled)return;settled=true;clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);};
     window[cb]=data=>finish(null,data);
     const q=new URLSearchParams({action,token:getManagerToken(),callback:cb,...params});
@@ -1097,6 +1126,11 @@ function updateReviewQueueCount_(){
   const count=grid.querySelectorAll(".review-card").length;
   state.textContent=count?`${count} submission${count===1?"":"s"} waiting`:"Nothing is waiting for review.";
 }
+function updateCachedReviewStatus_(submissionId,status){
+  if(!reviewQueueItemsCache)return;
+  if(status==="New"||status==="Reviewing")reviewQueueItemsCache=reviewQueueItemsCache.map(item=>String(item.submissionId)===String(submissionId)?{...item,status}:item);
+  else reviewQueueItemsCache=reviewQueueItemsCache.filter(item=>String(item.submissionId)!==String(submissionId));
+}
 async function legacyReviewStatus_(submissionId,status){
   await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status})});
 }
@@ -1106,17 +1140,58 @@ async function reviewStatus(submissionId,status,card){
     const data=await queueJsonp("update",{submissionId,status});
     if(!data.ok&&/unknown action/i.test(data.error||""))await legacyReviewStatus_(submissionId,status);
     else if(!data.ok)throw new Error(data.error||"Could not update that submission.");
+    updateCachedReviewStatus_(submissionId,status);
     if(card)card.remove();updateReviewQueueCount_();toast(`Marked ${status.toLowerCase()} ✓`);return true;
   }catch(e){toast(reviewQueueErrorMessage_(e));setReviewCardBusy_(card,false);return false;}
 }
 async function loadReviewSubmission(submissionId,card){
-  const state=document.getElementById("reviewState");if(state)state.textContent="Loading submission and media…";
+  const state=document.getElementById("reviewState"),reviewModal=card&&card.closest(".scrim");
+  if(state)state.textContent="Loading submission details…";
   setReviewCardBusy_(card,true);
   try{
-    const data=await queueJsonp("detail",{submissionId,markReviewing:"1"});
+    const data=await queueJsonp("detail",{submissionId,markReviewing:"1",includeMedia:"0"});
     if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
-    applyReviewSubmission(data.item);closeModal();toast(data.item.imageBase64?"Submission and source image loaded ✓":"Submission loaded — no automatic source image was available");
+    const needsMedia=!!data.item.mediaFileId&&!data.item.imageBase64;
+    data.item.mediaPending=needsMedia;
+    updateCachedReviewStatus_(submissionId,"Reviewing");
+    applyReviewSubmission(data.item);
+    if(reviewModal&&reviewModal.isConnected)reviewModal.remove();
+    toast(data.item.imageBase64?"Submission and source image loaded ✓":(needsMedia?"Submission loaded ✓ — source image is loading":"Submission loaded ✓ — no automatic source image was available"));
+    if(needsMedia)loadReviewMedia_(submissionId,false);
   }catch(e){setReviewCardBusy_(card,false);if(state)state.innerHTML=`<div class="err">${esc(reviewQueueErrorMessage_(e))}</div>`;}
+}
+async function loadReviewMedia_(submissionId,isRetry){
+  if(!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
+  const loadId=++reviewMediaLoadId;
+  reviewSource.mediaPending=true;reviewSource.mediaError="";renderLoadedReviewBanner();
+  if(isRetry)toast("Retrying the source image…");
+  try{
+    const data=await queueJsonp("media",{submissionId});
+    if(loadId!==reviewMediaLoadId||!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
+    if(!data.ok||!data.item)throw new Error(data.error||"Source image could not be loaded");
+    if(!data.item.imageBase64)throw new Error(data.item.mediaError||"No usable source image was returned");
+    applyReviewMedia_(data.item);toast("Source image loaded ✓");
+  }catch(e){
+    if(loadId!==reviewMediaLoadId||!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
+    reviewSource.mediaPending=false;reviewSource.mediaError=/unknown action/i.test(String(e&&e.message||e))?"Update the Apps Script deployment to enable background image loading.":reviewQueueErrorMessage_(e);
+    renderLoadedReviewBanner();toast("The submission is ready; its source image can be retried separately");
+  }
+}
+function applyReviewMedia_(item){
+  if(!reviewSource||String(reviewSource.submissionId)!==String(item.submissionId))return;
+  reviewSource.imageBase64=item.imageBase64||"";reviewSource.imageType=item.imageType||"image/jpeg";reviewSource.imageName=item.imageName||"submission.jpg";reviewSource.mediaPending=false;reviewSource.mediaError="";
+  const dataUrl=`data:${reviewSource.imageType};base64,${reviewSource.imageBase64}`;
+  if(activeType==="photo"){
+    photos=[{dataUrl,name:reviewSource.imageName,mediaType:reviewSource.imageType}];renderThumbs();
+    const drop=document.getElementById("drop");if(drop)drop.innerHTML='Source image loaded ✓ — <b>click or drop to replace it</b><br><span style="font-size:12px">Verify credit and reuse rights before approval</span>';
+  }else if(activeType==="reel"){
+    reelCover=dataUrl;renderReelThumb();
+  }else{
+    figure={dataUrl,name:reviewSource.imageName,mediaType:reviewSource.imageType};renderFigThumb();
+    const drop=document.getElementById("figDrop");if(drop)drop.innerHTML='Source image loaded ✓ — <b>click or drop to replace it</b>';
+  }
+  if(currentGraphic){currentGraphic.figure=dataUrl;if(document.getElementById("cardDisp"))drawCard("cardDisp");}
+  renderLoadedReviewBanner();
 }
 function applyReviewSubmission(item){
   reviewSource=item;paperMeta=null;photos=[];figure=null;reelCover=null;reelVideoLink="";
