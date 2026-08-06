@@ -61,7 +61,19 @@ function doGet(e) {
     if (action === "detail") {
       return jsonp_({
         ok: true,
-        item: getReviewDetail_(sanitizeId_(p.submissionId), p.markReviewing === "1")
+        // Older Studio builds expect the image inline. The current Studio sends
+        // includeMedia=0 so it can populate immediately and fetch media separately.
+        item: getReviewDetail_(
+          sanitizeId_(p.submissionId),
+          p.markReviewing === "1",
+          p.includeMedia !== "0"
+        )
+      }, p.callback);
+    }
+    if (action === "media") {
+      return jsonp_({
+        ok: true,
+        item: getReviewMedia_(sanitizeId_(p.submissionId))
       }, p.callback);
     }
     if (action === "update") {
@@ -190,7 +202,7 @@ function listReviewItems_() {
   return out;
 }
 
-function getReviewDetail_(submissionId, markReviewing) {
+function getReviewDetail_(submissionId, markReviewing, includeMedia) {
   var sheet = getSheet_();
   var item = findSubmission_(submissionId, sheet);
   if (!item) throw new Error("Submission not found.");
@@ -199,20 +211,48 @@ function getReviewDetail_(submissionId, markReviewing) {
     item.status = "Reviewing";
     updateReviewQueueCacheStatus_(item.submissionId, "Reviewing");
   }
+  if (includeMedia !== false && item.mediaFileId) {
+    var media = getReviewMediaFromItem_(item);
+    item.imageBase64 = media.imageBase64 || "";
+    item.imageType = media.imageType || "";
+    item.imageName = media.imageName || "";
+    item.mediaError = media.mediaError || "";
+  }
+  return item;
+}
+
+function getReviewMedia_(submissionId) {
+  var item = findSubmission_(submissionId);
+  if (!item) throw new Error("Submission not found.");
+  return getReviewMediaFromItem_(item);
+}
+
+function getReviewMediaFromItem_(item) {
+  var media = {
+    submissionId: String(item.submissionId || ""),
+    mediaFileId: String(item.mediaFileId || ""),
+    imageBase64: "",
+    imageType: "",
+    imageName: "",
+    mediaError: ""
+  };
+  if (!media.mediaFileId) return media;
   if (item.mediaFileId) {
     try {
       var blob = DriveApp.getFileById(item.mediaFileId).getBlob();
       var bytes = blob.getBytes();
       if (bytes.length <= MAX_IMAGE_BYTES) {
-        item.imageBase64 = Utilities.base64Encode(bytes);
-        item.imageType = blob.getContentType() || "image/jpeg";
-        item.imageName = blob.getName();
+        media.imageBase64 = Utilities.base64Encode(bytes);
+        media.imageType = blob.getContentType() || "image/jpeg";
+        media.imageName = blob.getName();
+      } else {
+        media.mediaError = "The source image is larger than 8 MB.";
       }
     } catch (err) {
-      item.mediaError = "The submitted image could not be loaded.";
+      media.mediaError = "The submitted image could not be loaded.";
     }
   }
-  return item;
+  return media;
 }
 
 function updateSubmissionStatus_(submissionId, status, errorText, optSheet) {
