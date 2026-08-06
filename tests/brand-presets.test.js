@@ -13,6 +13,10 @@ assert.match(source, /if\(s\.id==="light"\)\{[\s\S]*ctx\.fillRect\(P,H-170,76,7\
   "Ever Better Light should use a restrained footer rule instead of a large yellow band");
 assert.doesNotMatch(source, /const meta2=clip\(ctx,g\.meta2\|\|g\.dept/,
   "branded card footers must not repeat the department when detail line 2 is empty");
+assert.match(source, /ctx\.font=`600 25px \$\{s\.body\}`[\s\S]*ctx\.fillText\("Department of Chemical &",W-P,43\)/,
+  "the top-right department tag should use the former footer typeface at a more legible size");
+assert.doesNotMatch(source, /DEPARTMENT OF CHEMICAL &/,
+  "the department tag should use the cleaner title-case footer treatment");
 assert.match(source, /let y=s\.id==="cobalt"\?190:160/,
   "Cobalt Chevron should give the publication eyebrow breathing room below the header rule");
 
