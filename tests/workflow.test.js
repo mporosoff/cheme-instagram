@@ -135,5 +135,13 @@ assert.doesNotMatch(studioSource, /setTimeout\(refreshReviewQueue,500\)/,
   "review decisions must not trigger a competing full queue reload");
 assert.match(studioSource, /action==="media"\?120000:\(action==="detail"\?90000:45000\)/,
   "timeouts should separate private Drive media from the fast queue operations");
+assert.match(studioSource, /id="rpLink"/,
+  "shout-outs should expose a source-link field for manual and discovered posts");
+assert.match(studioSource, /setField\("rpLink",item\.link\)/,
+  "loading a discovered shout-out should retain its original source link");
+assert.match(studioSource, /link:sourceLink/,
+  "approved Studio payloads should save the retained source link in the publishing queue");
+assert.match(studioSource, /sourceLink,date:new Date\(\)\.toISOString\(\)/,
+  "local approval history should retain the source link for reference");
 
 console.log("Workflow tests passed");

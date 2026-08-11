@@ -19,5 +19,15 @@ assert.doesNotMatch(source, /DEPARTMENT OF CHEMICAL &/,
   "the department tag should use the cleaner title-case footer treatment");
 assert.match(source, /let y=s\.id==="cobalt"\?190:160/,
   "Cobalt Chevron should give the publication eyebrow breathing room below the header rule");
+assert.match(source, /if\(g\.subhead&&fig\)/,
+  "branded event and paper cards should render a compact subhead when an image is present");
+assert.doesNotMatch(source, /if\(g\.subhead&&!fig\)/,
+  "Studio Classic event cards must not drop the subhead when an image is present");
+assert.doesNotMatch(source, /if\(g\.subhead && !hasFig\)/,
+  "Studio Classic paper cards must not drop the subhead when an image is present");
+assert.match(source, /function photoImageDraw[\s\S]*blur\(32px\)[\s\S]*containDraw/,
+  "contained overlay photos should use a softened full-bleed backdrop instead of white letterboxing");
+assert.match(source, /if\(fig\)photoImageDraw\(ctx,fig,W,H,g\.imageFit/,
+  "every photo-overlay preset should use the aspect-ratio-safe image renderer");
 
 console.log("Brand preset tests passed");

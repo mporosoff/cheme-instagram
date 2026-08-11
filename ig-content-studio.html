@@ -333,6 +333,7 @@ function renderForm(){
     a.innerHTML=`<label class="fld"><span class="lab">Original author's handle</span><input type="text" id="rpHandle" placeholder="@labmate"></label>
       <label class="fld"><span class="lab">What did they post?</span><textarea id="rpWhat" placeholder="Paste their caption or describe the achievement..."></textarea></label>
       <label class="fld"><span class="lab">Why amplify it? <span class="hint">(optional)</span></span><input type="text" id="rpWhy" placeholder="e.g. best poster at AIChE"></label>
+      <label class="fld"><span class="lab">Source link <span class="hint">(optional — saved for reference, not shown on the graphic)</span></span><input type="url" id="rpLink" placeholder="https://..."></label>
       ${figureSlot("Add their image (optional)")}
       <div class="err" style="background:var(--paper);border-color:var(--line);color:var(--slate)">Tip: get the person's OK before reposting, and credit them.</div>`;
     wireFigure();
@@ -357,7 +358,8 @@ function renderLoadedReviewBanner(){
   const existing=a.querySelector(".loaded-review");if(existing)existing.remove();
   const box=document.createElement("div");box.className="meta-card loaded-review";
   const imageState=reviewSource.imageBase64?"Source image loaded automatically":(reviewSource.mediaPending?"Source image is loading in the background":(reviewSource.mediaError||"No automatic source image found; upload remains optional"));
-  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><div class="actions">${reviewSource.mediaError&&reviewSource.mediaFileId?'<button type="button" data-a="retry-media">Retry image</button>':""}<button type="button" data-a="clear-review">Clear</button></div>`;
+  const sourceLink=safeSourceLink_(reviewSource.link);
+  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><div class="actions">${sourceLink?`<a href="${esc(sourceLink)}" target="_blank" rel="noopener noreferrer">Source</a>`:""}${reviewSource.mediaError&&reviewSource.mediaFileId?'<button type="button" data-a="retry-media">Retry image</button>':""}<button type="button" data-a="clear-review">Clear</button></div>`;
   const clear=box.querySelector('[data-a="clear-review"]');if(clear)clear.onclick=()=>{reviewMediaLoadId++;reviewSource=null;renderForm();};
   const retry=box.querySelector('[data-a="retry-media"]');if(retry)retry.onclick=()=>loadReviewMedia_(reviewSource.submissionId,true);
   a.prepend(box);
@@ -475,6 +477,7 @@ function buildBrief(){
     let b="CONTENT TYPE: Reposting a department member's content. Credit them clearly.\n";
     if(handle)b+=`Original author: ${handle}\n`; b+=`What they shared: ${what}\n`;
     const why=val("rpWhy"); if(why)b+=`Why amplify: ${why}\n`;
+    const link=val("rpLink"); if(link)b+=`Source link: ${link}\n`;
     return{brief:b,withImage:!!figure,meta1:handle?"via "+handle:"",meta2:"",eyebrow:"Spotlight"};
   }
   return{error:"Pick a content type."};
@@ -674,7 +677,7 @@ function renderGraphicTab(){
           <option value="contain"${(g.imageFit||"contain")==="contain"?" selected":""}>Show entire image</option>
           <option value="cover"${g.imageFit==="cover"?" selected":""}>Fill frame (crop edges)</option>
         </select>
-        <span class="hint">Use “Show entire image” for graphical abstracts, plots, and diagrams.</span>
+        <span class="hint">“Show entire image” preserves every edge; photo overlays fill unused space with a softened copy instead of blank bands.</span>
       </label>`:"";
   a.innerHTML=`
     <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
@@ -722,6 +725,13 @@ function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+
 function coverDraw(ctx,img,x,y,w,h){const ir=img.width/img.height,r=w/h;let sw,sh,sx,sy;if(ir>r){sh=img.height;sw=sh*r;sx=(img.width-sw)/2;sy=0;}else{sw=img.width;sh=sw/r;sx=0;sy=(img.height-sh)/2;}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);}
 function containDraw(ctx,img,x,y,w,h,padding){const p=Math.max(0,padding||0),aw=Math.max(1,w-p*2),ah=Math.max(1,h-p*2),scale=Math.min(aw/img.width,ah/img.height),dw=img.width*scale,dh=img.height*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
 function framedImageDraw(ctx,img,x,y,w,h,fit){if((fit||"contain")==="cover")coverDraw(ctx,img,x,y,w,h);else{ctx.fillStyle="#FFFFFF";ctx.fillRect(x,y,w,h);containDraw(ctx,img,x,y,w,h,18);}}
+function photoImageDraw(ctx,img,W,H,fit){
+  if((fit||"cover")==="cover"){coverDraw(ctx,img,0,0,W,H);return;}
+  // Preserve the whole photo without white letterboxing. A softened full-bleed
+  // copy supplies color behind unusually wide or tall source images.
+  ctx.save();ctx.filter="blur(32px) brightness(.62) saturate(.88)";coverDraw(ctx,img,-40,-40,W+80,H+80);ctx.restore();
+  containDraw(ctx,img,0,0,W,H,0);
+}
 function hexRgba(hex,alpha){const h=String(hex||"#000000").replace("#",""),n=parseInt(h.length===3?h.split("").map(c=>c+c).join(""):h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;}
 function angularPanel(ctx,x,y,w,h,cut,fill){
   ctx.beginPath();ctx.moveTo(x+cut,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);ctx.lineTo(x,y+cut);ctx.closePath();
@@ -782,7 +792,7 @@ function drawBrandFooter(ctx,g,s,W,H,P){
   }
 }
 function drawBrandPhoto(ctx,g,fig,W,H,P,reel,s,logo){
-  if(fig)framedImageDraw(ctx,fig,0,0,W,H,g.imageFit||"cover");else{ctx.fillStyle=s.bg;ctx.fillRect(0,0,W,H);}
+  if(fig)photoImageDraw(ctx,fig,W,H,g.imageFit||"cover");else{ctx.fillStyle=s.bg;ctx.fillRect(0,0,W,H);}
   const overlayBg=s.id==="light"?"#001E5F":s.bg,overlayFg="#FFFFFF";
   const grad=ctx.createLinearGradient(0,H*.32,0,H);grad.addColorStop(0,"rgba(0,30,95,0)");grad.addColorStop(1,hexRgba(overlayBg,.97));ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
   ctx.fillStyle=hexRgba(overlayBg,.92);ctx.fillRect(0,0,W,166);
@@ -828,10 +838,15 @@ function drawBrandCard(ctx,g,fig,W,H,P,reel,s,logo){
   if(g.template==="event"){
     let y=160;
     ctx.font=`700 27px ${s.label}`;ctx.fillStyle=s.id==="light"?s.accent2:s.accent;ctx.fillText((g.eyebrow||"EVENT").toUpperCase(),P,y);y+=55;
-    const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:fig?174:300,weight:s.headlineWeight,family:s.headline,max:fig?68:84,min:40,lh:1.05});
+    const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:fig?155:300,weight:s.headlineWeight,family:s.headline,max:fig?64:84,min:38,lh:1.05});
     ctx.font=`${s.headlineWeight} ${hf.size}px ${s.headline}`;ctx.fillStyle=s.fg;hf.lines.forEach(line=>{ctx.fillText(line,P,y);y+=hf.size*1.05;});
+    if(g.subhead&&fig){
+      y+=18;
+      const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:fig?82:120,weight:"600",family:s.body,max:fig?32:38,min:25,lh:1.2});
+      ctx.font=`600 ${sf.size}px ${s.body}`;ctx.fillStyle=s.muted;sf.lines.forEach(line=>{ctx.fillText(line,P,y);y+=sf.size*1.2;});
+    }
     if(fig){
-      y+=25;const imageH=Math.min(330,H-y-300);
+      y+=22;const imageH=Math.max(180,Math.min(300,H-y-300));
       ctx.save();roundRect(ctx,P,y,W-P*2,imageH,18);ctx.clip();framedImageDraw(ctx,fig,P,y,W-P*2,imageH,g.imageFit||"contain");ctx.restore();
       ctx.strokeStyle=hexRgba(s.fg,.18);ctx.lineWidth=2;roundRect(ctx,P,y,W-P*2,imageH,18);ctx.stroke();
     }else if(g.subhead){
@@ -850,8 +865,13 @@ function drawBrandCard(ctx,g,fig,W,H,P,reel,s,logo){
   const hasFig=!!fig;
   const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:hasFig?220:330,weight:s.headlineWeight,family:s.headline,max:hasFig?70:88,min:40,lh:1.04});
   ctx.font=`${s.headlineWeight} ${hf.size}px ${s.headline}`;ctx.fillStyle=s.fg;hf.lines.forEach(line=>{ctx.fillText(line,P,y);y+=hf.size*1.04;});
+  if(g.subhead&&hasFig){
+    y+=18;
+    const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:hasFig?88:250,weight:"600",family:s.body,max:hasFig?33:42,min:26,lh:1.22});
+    ctx.font=`600 ${sf.size}px ${s.body}`;ctx.fillStyle=s.muted;sf.lines.forEach(line=>{ctx.fillText(line,P,y);y+=sf.size*1.22;});
+  }
   if(hasFig){
-    const fy=Math.max(y+26,430),fh=H-fy-230;
+    const fy=Math.max(y+22,500),fh=H-fy-230;
     ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();framedImageDraw(ctx,fig,P,fy,W-P*2,fh,g.imageFit||"contain");ctx.restore();
     ctx.strokeStyle=hexRgba(s.fg,.18);ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();
   }else if(g.subhead){
@@ -895,7 +915,7 @@ async function drawCard(canvasId){
   ctx.textBaseline="top";
 
   if(g.template==="photo"||reel){
-    if(fig)framedImageDraw(ctx,fig,0,0,W,H,g.imageFit||(reel||g.template==="photo"?"cover":"contain")); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
+    if(fig)photoImageDraw(ctx,fig,W,H,g.imageFit||(reel||g.template==="photo"?"cover":"contain")); else {ctx.fillStyle="#2A2722";ctx.fillRect(0,0,W,H);}
     const grad=ctx.createLinearGradient(0,H*0.45,0,H);grad.addColorStop(0,"rgba(15,13,11,0)");grad.addColorStop(1,"rgba(15,13,11,0.86)");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
     if(reel){ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle="rgba(255,255,255,.9)";ctx.fillText("▶ REEL",P,P);}
     const f=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:reel?230:200,weight:"700",family:"'Space Grotesk'",max:78,min:40,lh:1.08});
@@ -952,17 +972,17 @@ async function drawCard(canvasId){
     ctx.font="600 30px 'IBM Plex Mono'";ctx.fillStyle=acc;
     ctx.fillText((g.eyebrow||"Event").toUpperCase(),P,y);y+=58;
     if(fig){
-      const imageH=300;
+      const imageH=220;
       ctx.save();roundRect(ctx,P,y,W-P*2,imageH,18);ctx.clip();framedImageDraw(ctx,fig,P,y,W-P*2,imageH,g.imageFit||"contain");ctx.restore();
       ctx.strokeStyle=dark?"rgba(255,255,255,.10)":"rgba(0,0,0,.10)";ctx.lineWidth=2;roundRect(ctx,P,y,W-P*2,imageH,18);ctx.stroke();
-      y+=imageH+38;
+      y+=imageH+30;
     }
-    const maxHeadlineH=fig?190:350;
-    const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:maxHeadlineH,weight:"700",family:"'Space Grotesk'",max:fig?70:88,min:40,lh:1.06});
+    const maxHeadlineH=fig?150:350;
+    const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:maxHeadlineH,weight:"700",family:"'Space Grotesk'",max:fig?62:88,min:38,lh:1.06});
     ctx.fillStyle=fg;ctx.font=`700 ${hf.size}px 'Space Grotesk'`;hf.lines.forEach(l=>{ctx.fillText(l,P,y);y+=hf.size*1.06;});
-    if(g.subhead&&!fig){
-      y+=18;
-      const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:120,weight:"500",family:"'IBM Plex Sans'",max:38,min:27,lh:1.24});
+    if(g.subhead){
+      y+=fig?12:18;
+      const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:fig?72:120,weight:"500",family:"'IBM Plex Sans'",max:fig?30:38,min:24,lh:1.2});
       ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,y);y+=sf.size*1.24;});
     }
     const panelY=H-250,panelH=158;
@@ -994,8 +1014,8 @@ async function drawCard(canvasId){
   const hf=fitLines(ctx,g.headline||"",{maxW:W-P*2,maxH:headMaxH,weight:"700",family:"'Space Grotesk'",max:hasFig?72:92,min:42,lh:1.07});
   ctx.fillStyle=fg; ctx.font=`700 ${hf.size}px 'Space Grotesk'`; hf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=hf.size*1.07;});
   cursor+=14;
-  if(g.subhead && !hasFig){const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:200,weight:"500",family:"'IBM Plex Sans'",max:40,min:28,lh:1.3});ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=sf.size*1.3;});}
-  if(hasFig){const fy=Math.max(cursor+10,440),fh=H-fy-220;ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();framedImageDraw(ctx,fig,P,fy,W-P*2,fh,g.imageFit||"contain");ctx.restore();ctx.strokeStyle=dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)";ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();}
+  if(g.subhead){const sf=fitLines(ctx,g.subhead,{maxW:W-P*2,maxH:hasFig?88:200,weight:"500",family:"'IBM Plex Sans'",max:hasFig?33:40,min:26,lh:1.24});ctx.fillStyle=muted;ctx.font=`500 ${sf.size}px 'IBM Plex Sans'`;sf.lines.forEach(l=>{ctx.fillText(l,P,cursor);cursor+=sf.size*1.24;});}
+  if(hasFig){const fy=Math.max(cursor+16,500),fh=H-fy-220;ctx.save();roundRect(ctx,P,fy,W-P*2,fh,16);ctx.clip();framedImageDraw(ctx,fig,P,fy,W-P*2,fh,g.imageFit||"contain");ctx.restore();ctx.strokeStyle=dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)";ctx.lineWidth=2;roundRect(ctx,P,fy,W-P*2,fh,16);ctx.stroke();}
   // footer meta
   ctx.fillStyle=acc; roundRect(ctx,P,H-220,70,7,4); ctx.fill();
   if(g.meta1){ctx.font="600 32px 'Space Grotesk'";ctx.fillStyle=fg;ctx.fillText(clip(ctx,g.meta1,W-P*2,"600 32px 'Space Grotesk'"),P,H-182);}
@@ -1014,16 +1034,26 @@ function downloadGraphic(){
 /* ===== queue ===== */
 function getQueue(){try{return JSON.parse(lsGet("igs2_queue")||"[]");}catch(e){return[];}}
 function setQueue(q){lsSet("igs2_queue",JSON.stringify(q));renderQueue();}
+function safeSourceLink_(value){
+  const text=String(value||"").trim();if(!text)return"";
+  try{const url=new URL(text);return url.protocol==="http:"||url.protocol==="https:"?url.href:"";}catch(e){return"";}
+}
+function approvalSourceLink_(){
+  const fields={paper:"doi",event:"evLink",repost:"rpLink"};
+  const field=fields[current&&current.type],entered=field?v(field):"";
+  return safeSourceLink_(entered)||safeSourceLink_(reviewSource&&reviewSource.link);
+}
 async function approve(){
   if(!current)return;
   current.caption=withReviewImageCredit(current.caption);
-  const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,date:new Date().toISOString()});setQueue(q);
+  const sourceLink=approvalSourceLink_();
+  const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,sourceLink,date:new Date().toISOString()});setQueue(q);
   const url=(getSettings().publishUrl||"").trim();
   if(url.indexOf("http")===0){
     let img="";const disp=document.getElementById("cardDisp");
     if(disp){try{img=disp.toDataURL("image/jpeg",0.92).split(",")[1];}catch(e){}}
     const fullCaption=current.caption+(current.hashtags.length?"\n\n"+current.hashtags.map(h=>"#"+h).join(" "):"");
-    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",sourceSubmissionId:reviewSource?reviewSource.submissionId:"",consent:true};
+    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",link:sourceLink,videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",sourceSubmissionId:reviewSource?reviewSource.submissionId:"",consent:true};
     try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast(reviewSource?"Approved and marked reviewed ✓":"Sent to the IG publishing queue ✓");}
     catch(e){toast("Saved locally — couldn't reach the queue");}
   } else {
@@ -1036,7 +1066,8 @@ function renderQueue(){
   if(!q.length){list.innerHTML=`<div class="qempty">A local history appears here after approval. The private Google Sheet remains the authoritative publishing queue.</div>`;return;}
   list.innerHTML="";const labels={paper:"Paper",event:"Event",photo:"Photo",repost:"Repost"};
   q.forEach(item=>{const d=document.createElement("div");d.className="qcard";
-    d.innerHTML=`<div class="top"><span class="pill">${labels[item.type]||item.type}</span><span class="qcount">${new Date(item.date).toLocaleDateString()}</span></div><div class="cap">${esc(item.caption)}</div><div class="qacts"><button class="btn sm" data-a="copy">Copy</button><button class="btn ghost sm" data-a="del">Remove</button></div>`;
+    const sourceLink=safeSourceLink_(item.sourceLink);
+    d.innerHTML=`<div class="top"><span class="pill">${labels[item.type]||item.type}</span><span class="qcount">${new Date(item.date).toLocaleDateString()}</span></div><div class="cap">${esc(item.caption)}</div><div class="qacts"><button class="btn sm" data-a="copy">Copy</button>${sourceLink?`<a class="btn ghost sm" href="${esc(sourceLink)}" target="_blank" rel="noopener noreferrer">Source</a>`:""}<button class="btn ghost sm" data-a="del">Remove</button></div>`;
     d.querySelector('[data-a="copy"]').onclick=()=>copy(item.caption+"\n\n"+(item.hashtags||[]).map(h=>"#"+h).join(" "),"Copied");
     d.querySelector('[data-a="del"]').onclick=()=>setQueue(getQueue().filter(x=>x.id!==item.id));list.appendChild(d);});
 }
@@ -1210,7 +1241,7 @@ function applyReviewSubmission(item){
   if(activeType==="event"){setField("evTitle",item.title);setField("evDate",item.date);setField("evTime",item.time);setField("evLoc",item.location);setField("evDesc",draftDetails);setField("evLink",item.link);}
   if(activeType==="photo")setField("photoNote",context);
   if(activeType==="reel"){setField("reelLink",item.videoLink);setField("reelNote",context);reelVideoLink=item.videoLink||"";}
-  if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy",item.submitter==="Discovery Bot"?"Identified from an official source for department review":"Submitted by "+(item.submitter||"department member"));}
+  if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy",item.submitter==="Discovery Bot"?"Identified from an official source for department review":"Submitted by "+(item.submitter||"department member"));setField("rpLink",item.link);}
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function reviewDetailsForDraft_(item){
