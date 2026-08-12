@@ -18,6 +18,12 @@ assert.match(formSource, /id="file"[^>]*multiple/,
   "the public form should accept multiple images in one picker action");
 assert.match(formSource, /images=selectedImages\.map/,
   "the public form should send an ordered images array");
+assert.match(formSource, /id="photoErr"[^>]*aria-live="assertive"/,
+  "image-selection errors should appear beside the public form picker");
+assert.match(formSource, /activeType==="Photo"&&!selectedImages\.length/,
+  "Photo submissions should not be accepted without a rendered image preview");
+assert.match(formSource, /HEIC\/HEIF photos must be exported or shared as JPEG first/,
+  "unsupported phone photo formats should receive actionable guidance");
 assert.match(studioSource, /id="fileInput"[^>]*multiple/,
   "the Content Studio should accept multiple images in one picker action");
 assert.match(studioSource, /Plain photo \+ per-image text/,
