@@ -135,6 +135,9 @@
   .overlay-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:11px;}
   .overlay-controls .full{grid-column:1 / -1;}
   .overlay-controls label.fld{margin:0;}
+  .overlay-opacity{display:flex;align-items:center;gap:10px;min-height:38px;}
+  .overlay-opacity input{flex:1;min-width:0;accent-color:var(--glow);}
+  .overlay-opacity output{min-width:42px;text-align:right;font:600 12px "IBM Plex Mono",monospace;color:var(--ink-soft);}
 
   /* queue */
   .queue-wrap{max-width:1240px;margin:0 auto 40px;padding:0 22px;}
@@ -307,7 +310,7 @@ const TYPES=[
 ];
 let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="", reviewSource=null;
 const MAX_CAROUSEL_IMAGES=10, MAX_CAROUSEL_BYTES=30*1024*1024;
-const PLAIN_OVERLAY_DEFAULTS={overlayFont:"inter",overlayColor:"#FFFFFF",overlayOutline:"medium",overlayOutlineColor:"#000000",overlayPosition:"bottom-center"};
+const PLAIN_OVERLAY_DEFAULTS={overlayFont:"inter",overlayColor:"#FFFFFF",overlayOutline:"medium",overlayOutlineColor:"#000000",overlayPosition:"bottom-center",overlayBackground:"on",overlayBackgroundColor:"#000000",overlayBackgroundOpacity:34};
 const PLAIN_OVERLAY_FONTS={inter:"'Inter'",space:"'Space Grotesk'",serif:"Georgia",mono:"'IBM Plex Mono'"};
 let reviewQueueItemsCache=null, reviewQueueListPromise=null, reviewQueueGeneration=0, reviewMediaLoadId=0;
 
@@ -742,6 +745,9 @@ function renderGraphicTab(){
             <label class="fld"><span class="lab">Font outline</span><select id="gOverlayOutline"><option value="none"${activeSlide.overlayOutline==="none"?" selected":""}>None</option><option value="thin"${activeSlide.overlayOutline==="thin"?" selected":""}>Thin</option><option value="medium"${activeSlide.overlayOutline==="medium"?" selected":""}>Medium</option><option value="thick"${activeSlide.overlayOutline==="thick"?" selected":""}>Thick</option></select></label>
             <label class="fld"><span class="lab">Outline color</span><input type="color" id="gOverlayOutlineColor" value="${esc(activeSlide.overlayOutlineColor)}"${activeSlide.overlayOutline==="none"?" disabled":""}></label>
             <label class="fld full"><span class="lab">Position</span><select id="gOverlayPosition"><option value="top-left"${activeSlide.overlayPosition==="top-left"?" selected":""}>Top left</option><option value="top-center"${activeSlide.overlayPosition==="top-center"?" selected":""}>Top center</option><option value="top-right"${activeSlide.overlayPosition==="top-right"?" selected":""}>Top right</option><option value="middle-left"${activeSlide.overlayPosition==="middle-left"?" selected":""}>Middle left</option><option value="middle-center"${activeSlide.overlayPosition==="middle-center"?" selected":""}>Middle center</option><option value="middle-right"${activeSlide.overlayPosition==="middle-right"?" selected":""}>Middle right</option><option value="bottom-left"${activeSlide.overlayPosition==="bottom-left"?" selected":""}>Bottom left</option><option value="bottom-center"${activeSlide.overlayPosition==="bottom-center"?" selected":""}>Bottom center</option><option value="bottom-right"${activeSlide.overlayPosition==="bottom-right"?" selected":""}>Bottom right</option></select></label>
+            <label class="fld"><span class="lab">Text background</span><select id="gOverlayBackground"><option value="on"${activeSlide.overlayBackground!=="off"?" selected":""}>On</option><option value="off"${activeSlide.overlayBackground==="off"?" selected":""}>Off</option></select></label>
+            <label class="fld"><span class="lab">Background color</span><input type="color" id="gOverlayBackgroundColor" value="${esc(activeSlide.overlayBackgroundColor)}"${activeSlide.overlayBackground==="off"?" disabled":""}></label>
+            <label class="fld full"><span class="lab">Background opacity</span><span class="overlay-opacity"><input type="range" id="gOverlayBackgroundOpacity" min="0" max="100" step="1" value="${plainBackgroundOpacity_(activeSlide.overlayBackgroundOpacity)}"${activeSlide.overlayBackground==="off"?" disabled":""}><output id="gOverlayBackgroundOpacityValue">${plainBackgroundOpacity_(activeSlide.overlayBackgroundOpacity)}%</output></span><span class="hint">0% is fully transparent; 100% is solid.</span></label>
           </div>
           <span class="hint">These choices apply only to image ${activeSlideIndex+1} and are baked into its JPEG. The traditional Instagram caption stays separate.</span>`:`<span class="hint">Preview each image. The selected template is applied to every slide.</span>`}
       </div>`:"";
@@ -789,10 +795,17 @@ function renderGraphicTab(){
     slide.overlayOutline=v("gOverlayOutline")||PLAIN_OVERLAY_DEFAULTS.overlayOutline;
     slide.overlayOutlineColor=v("gOverlayOutlineColor")||PLAIN_OVERLAY_DEFAULTS.overlayOutlineColor;
     slide.overlayPosition=v("gOverlayPosition")||PLAIN_OVERLAY_DEFAULTS.overlayPosition;
+    slide.overlayBackground=v("gOverlayBackground")||PLAIN_OVERLAY_DEFAULTS.overlayBackground;
+    slide.overlayBackgroundColor=v("gOverlayBackgroundColor")||PLAIN_OVERLAY_DEFAULTS.overlayBackgroundColor;
+    slide.overlayBackgroundOpacity=plainBackgroundOpacity_(v("gOverlayBackgroundOpacity"));
     const outlineColor=document.getElementById("gOverlayOutlineColor");if(outlineColor)outlineColor.disabled=slide.overlayOutline==="none";
+    const backgroundOff=slide.overlayBackground==="off",backgroundColor=document.getElementById("gOverlayBackgroundColor"),backgroundOpacity=document.getElementById("gOverlayBackgroundOpacity"),backgroundOpacityValue=document.getElementById("gOverlayBackgroundOpacityValue");
+    if(backgroundColor)backgroundColor.disabled=backgroundOff;
+    if(backgroundOpacity)backgroundOpacity.disabled=backgroundOff;
+    if(backgroundOpacityValue)backgroundOpacityValue.textContent=`${slide.overlayBackgroundOpacity}%`;
     drawCard("cardDisp");
   };
-  ["gOverlayFont","gOverlayColor","gOverlayOutline","gOverlayOutlineColor","gOverlayPosition"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=updateOverlayStyle;el.onchange=updateOverlayStyle;}});
+  ["gOverlayFont","gOverlayColor","gOverlayOutline","gOverlayOutlineColor","gOverlayPosition","gOverlayBackground","gOverlayBackgroundColor","gOverlayBackgroundOpacity"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=updateOverlayStyle;el.onchange=updateOverlayStyle;}});
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   const downloadAll=document.getElementById("dlAllGraphics");if(downloadAll)downloadAll.onclick=downloadAllGraphics;
   document.getElementById("approveBtn").onclick=approve;
@@ -818,6 +831,7 @@ function photoImageDraw(ctx,img,W,H,fit){
   containDraw(ctx,img,0,0,W,H,0);
 }
 function plainOutlineWidth_(value){return{none:0,thin:2,medium:5,thick:9}[value]??5;}
+function plainBackgroundOpacity_(value){const number=Number(value);return Number.isFinite(number)?Math.max(0,Math.min(100,Math.round(number))):PLAIN_OVERLAY_DEFAULTS.overlayBackgroundOpacity;}
 function drawPlainPhoto(ctx,img,slide,W,H,fit){
   ctx.clearRect(0,0,W,H);
   if(img)photoImageDraw(ctx,img,W,H,fit||"contain");else{ctx.fillStyle="#1C1B19";ctx.fillRect(0,0,W,H);}
@@ -836,7 +850,8 @@ function drawPlainPhoto(ctx,img,slide,W,H,fit){
   const widths=lines.map(line=>ctx.measureText(line).width),panelWidth=Math.min(W-48,Math.max(...widths)+76),panelHeight=textHeight+54;
   const panelX=horizontal==="left"?P-28:(horizontal==="right"?W-P-panelWidth+28:(W-panelWidth)/2);
   const panelY=y-27;
-  ctx.fillStyle="rgba(0,0,0,.34)";roundRect(ctx,panelX,panelY,panelWidth,panelHeight,22);ctx.fill();
+  const backgroundOpacity=plainBackgroundOpacity_(styled.overlayBackgroundOpacity)/100;
+  if(styled.overlayBackground!=="off"&&backgroundOpacity>0){ctx.fillStyle=hexRgba(styled.overlayBackgroundColor,backgroundOpacity);roundRect(ctx,panelX,panelY,panelWidth,panelHeight,22);ctx.fill();}
   ctx.font=font;ctx.textAlign=horizontal;ctx.textBaseline="top";ctx.lineJoin="round";
   const outlineWidth=plainOutlineWidth_(styled.overlayOutline);
   let cursorY=y;
