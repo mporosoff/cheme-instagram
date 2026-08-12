@@ -10,25 +10,29 @@
  *   3. Confirm the logged NOTIFICATION_EMAIL (or edit it under
  *      Project Settings ▸ Script properties).
  *
- * Sheet columns A–T:
+ * Sheet columns A–X:
  * Timestamp | Submitter | Credit | Type | Title | Details | Date | Time |
  * Location | Link | Caption | MediaURL | MediaFileId | VideoLink | Status |
- * SubmissionId | PublishedAt | InstagramPostId | Error | SourceSubmissionId
+ * SubmissionId | PublishedAt | InstagramPostId | Error | SourceSubmissionId |
+ * MediaFileIds | MediaURLs | OverlayCaptions | MediaCount
  */
 
 var FOLDER_NAME = "UR ChemE IG Media";
 var SHEET_NAME = "Posts";
 var MAX_PUBLIC_SUBMISSIONS_PER_HOUR = 40;
 var MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+var MAX_CAROUSEL_IMAGES = 10;
+var MAX_CAROUSEL_BYTES = 30 * 1024 * 1024;
 var MAX_REVIEW_LIST_ITEMS = 60;
 var REVIEW_LIST_PREVIEW_CHARS = 700;
-var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v2";
+var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v3";
 var REVIEW_QUEUE_CACHE_SECONDS = 45;
 var HEADERS = [
   "Timestamp", "Submitter", "Credit", "Type", "Title", "Details",
   "Date", "Time", "Location", "Link", "Caption", "MediaURL",
   "MediaFileId", "VideoLink", "Status", "SubmissionId", "PublishedAt",
-  "InstagramPostId", "Error", "SourceSubmissionId"
+  "InstagramPostId", "Error", "SourceSubmissionId", "MediaFileIds",
+  "MediaURLs", "OverlayCaptions", "MediaCount"
 ];
 
 function doPost(e) {
@@ -73,7 +77,7 @@ function doGet(e) {
     if (action === "media") {
       return jsonp_({
         ok: true,
-        item: getReviewMedia_(sanitizeId_(p.submissionId))
+        item: getReviewMedia_(sanitizeId_(p.submissionId), p.mediaIndex)
       }, p.callback);
     }
     if (action === "update") {
@@ -99,19 +103,27 @@ function handleSubmission_(d) {
   if (existing) return json_({ ok: true, duplicate: true, submissionId: submissionId });
 
   var videoLink = normalizeDriveFileId_(d.videoLink || "");
-  var mediaUrl = "", fileId = "";
-  if (d.imageBase64) {
+  var submittedImages = normalizeSubmissionImages_(d);
+  var mediaUrls = [], fileIds = [], overlayCaptions = [];
+  if (submittedImages.length) {
     var folder = getFolder_(FOLDER_NAME);
-    var blob = Utilities.newBlob(
-      Utilities.base64Decode(d.imageBase64),
-      d.imageType || "image/jpeg",
-      safeFileName_(d.imageName || ("img-" + Date.now() + ".jpg"))
-    );
-    var file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    fileId = file.getId();
-    mediaUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
+    for (var imageIndex = 0; imageIndex < submittedImages.length; imageIndex++) {
+      var submittedImage = submittedImages[imageIndex];
+      var blob = Utilities.newBlob(
+        Utilities.base64Decode(submittedImage.imageBase64),
+        submittedImage.imageType || "image/jpeg",
+        safeFileName_((imageIndex + 1) + "-" + (submittedImage.imageName || ("img-" + Date.now() + ".jpg")))
+      );
+      var file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      var createdFileId = file.getId();
+      fileIds.push(createdFileId);
+      mediaUrls.push("https://drive.google.com/uc?export=view&id=" + createdFileId);
+      overlayCaptions.push(clean_(submittedImage.overlayCaption, 500));
+    }
   }
+  var fileId = fileIds[0] || "";
+  var mediaUrl = mediaUrls[0] || "";
 
   var sourceSubmissionId = isStudio ? sanitizeId_(d.sourceSubmissionId) : "";
   sheet.appendRow([
@@ -120,7 +132,11 @@ function handleSubmission_(d) {
     clean_(d.details, 6000), clean_(d.date, 50), clean_(d.time, 50),
     clean_(d.location, 300), clean_(d.link, 1000), clean_(d.caption, 10000),
     mediaUrl, fileId, videoLink, isStudio ? "Ready" : "New", submissionId,
-    "", "", "", sourceSubmissionId
+    "", "", "", sourceSubmissionId,
+    fileIds.length ? JSON.stringify(fileIds) : "",
+    mediaUrls.length ? JSON.stringify(mediaUrls) : "",
+    overlayCaptions.some(function(caption) { return !!caption; }) ? JSON.stringify(overlayCaptions) : "",
+    fileIds.length
   ]);
   invalidateReviewQueueCache_();
 
@@ -140,16 +156,48 @@ function validateSubmission_(d, isStudio) {
   if (String(d.title || "").length > 500) throw new Error("Title is too long.");
   if (String(d.details || "").length > 6000) throw new Error("Details are too long.");
   if (String(d.caption || "").length > 10000) throw new Error("Caption is too long.");
-  if (d.imageBase64) {
-    var mime = String(d.imageType || "").toLowerCase();
+  var images = normalizeSubmissionImages_(d);
+  if (images.length > MAX_CAROUSEL_IMAGES) throw new Error("A carousel can contain up to " + MAX_CAROUSEL_IMAGES + " images.");
+  var totalImageBytes = 0;
+  for (var imageIndex = 0; imageIndex < images.length; imageIndex++) {
+    var image = images[imageIndex];
+    var mime = String(image.imageType || "").toLowerCase();
     if (!/^image\/(jpeg|png|webp)$/.test(mime)) throw new Error("Unsupported image type.");
-    var approximateBytes = Math.floor(String(d.imageBase64).length * 3 / 4);
+    var approximateBytes = Math.floor(String(image.imageBase64).length * 3 / 4);
     if (approximateBytes > MAX_IMAGE_BYTES) throw new Error("Image exceeds 8 MB.");
+    totalImageBytes += approximateBytes;
+    if (String(image.overlayCaption || "").length > 500) throw new Error("An image caption is too long.");
   }
+  if (totalImageBytes > MAX_CAROUSEL_BYTES) throw new Error("Carousel images exceed 30 MB combined.");
   if (String(d.type || "").toLowerCase() === "video") {
     var videoId = normalizeDriveFileId_(d.videoLink || "");
     if (!/^[A-Za-z0-9_-]{20,}$/.test(videoId)) throw new Error("A valid Google Drive video link is required.");
   }
+}
+
+function normalizeSubmissionImages_(d) {
+  var raw = Array.isArray(d && d.images) ? d.images : [];
+  if (!raw.length && d && d.imageBase64) {
+    raw = [{
+      imageBase64: d.imageBase64,
+      imageType: d.imageType,
+      imageName: d.imageName,
+      overlayCaption: d.overlayCaption
+    }];
+  }
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var item = raw[i] || {};
+    var base64 = String(item.imageBase64 || "");
+    if (!base64) continue;
+    out.push({
+      imageBase64: base64,
+      imageType: String(item.imageType || "image/jpeg"),
+      imageName: String(item.imageName || ("image-" + (i + 1) + ".jpg")),
+      overlayCaption: String(item.overlayCaption || "")
+    });
+  }
+  return out;
 }
 
 function enforceRateLimit_() {
@@ -187,9 +235,9 @@ function listReviewItems_() {
   if (cached) return cached;
   var sheet = getSheet_();
   if (sheet.getLastRow() < 2) return [];
-  // The queue cards need only A:P. Full details/media are fetched for the one
-  // item the reviewer opens, so avoid transferring the publishing-only columns.
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
+  // Include ordered media metadata so cards can identify carousel posts.
+  // Image bytes are still fetched only for the submission the reviewer opens.
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
   var out = [];
   for (var i = rows.length - 1; i >= 0 && out.length < MAX_REVIEW_LIST_ITEMS; i--) {
     var item = rowObject_(rows[i], i + 2);
@@ -221,25 +269,31 @@ function getReviewDetail_(submissionId, markReviewing, includeMedia) {
   return item;
 }
 
-function getReviewMedia_(submissionId) {
+function getReviewMedia_(submissionId, mediaIndex) {
   var item = findSubmission_(submissionId);
   if (!item) throw new Error("Submission not found.");
-  return getReviewMediaFromItem_(item);
+  return getReviewMediaFromItem_(item, mediaIndex);
 }
 
-function getReviewMediaFromItem_(item) {
+function getReviewMediaFromItem_(item, mediaIndex) {
+  var fileIds = item.mediaFileIds && item.mediaFileIds.length ? item.mediaFileIds : (item.mediaFileId ? [item.mediaFileId] : []);
+  var captions = item.overlayCaptions || [];
+  var index = Math.max(0, Math.floor(Number(mediaIndex) || 0));
   var media = {
     submissionId: String(item.submissionId || ""),
-    mediaFileId: String(item.mediaFileId || ""),
+    mediaFileId: String(fileIds[index] || ""),
+    mediaIndex: index,
+    mediaCount: fileIds.length,
+    overlayCaption: String(captions[index] || ""),
     imageBase64: "",
     imageType: "",
     imageName: "",
     mediaError: ""
   };
   if (!media.mediaFileId) return media;
-  if (item.mediaFileId) {
+  if (media.mediaFileId) {
     try {
-      var blob = DriveApp.getFileById(item.mediaFileId).getBlob();
+      var blob = DriveApp.getFileById(media.mediaFileId).getBlob();
       var bytes = blob.getBytes();
       if (bytes.length <= MAX_IMAGE_BYTES) {
         media.imageBase64 = Utilities.base64Encode(bytes);
@@ -336,6 +390,11 @@ function findSubmission_(submissionId, optSheet) {
 }
 
 function rowObject_(r, rowNumber) {
+  var mediaFileIds = parseJsonArray_(r[20]);
+  var mediaUrls = parseJsonArray_(r[21]);
+  var overlayCaptions = parseJsonArray_(r[22]);
+  if (!mediaFileIds.length && r[12]) mediaFileIds = [String(r[12])];
+  if (!mediaUrls.length && r[11]) mediaUrls = [String(r[11])];
   return {
     rowNumber: rowNumber,
     timestamp: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ""),
@@ -346,8 +405,22 @@ function rowObject_(r, rowNumber) {
     mediaFileId: String(r[12] || ""), videoLink: String(r[13] || ""),
     status: String(r[14] || ""), submissionId: String(r[15] || ""),
     publishedAt: String(r[16] || ""), instagramPostId: String(r[17] || ""),
-    error: String(r[18] || ""), sourceSubmissionId: String(r[19] || "")
+    error: String(r[18] || ""), sourceSubmissionId: String(r[19] || ""),
+    mediaFileIds: mediaFileIds, mediaUrls: mediaUrls,
+    overlayCaptions: overlayCaptions, mediaCount: Number(r[23] || mediaFileIds.length || 0)
   };
+}
+
+function parseJsonArray_(value) {
+  if (Array.isArray(value)) return value.map(String);
+  var text = String(value || "").trim();
+  if (!text) return [];
+  try {
+    var parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (err) {
+    return [];
+  }
 }
 
 function sendNewSubmissionEmail_(d, submissionId, sheet) {
@@ -355,8 +428,10 @@ function sendNewSubmissionEmail_(d, submissionId, sheet) {
   if (!email) return;
   var title = clean_(d.title, 500);
   var type = clean_(d.type, 50) || "Submission";
+  var imageCount = normalizeSubmissionImages_(d).length;
   var body = "<p>A new <b>" + html_(type) + "</b> submission is waiting for review.</p>" +
     "<p><b>" + html_(title) + "</b><br>From: " + html_(clean_(d.submitter, 150)) + "</p>" +
+    (imageCount > 1 ? "<p>Carousel: " + imageCount + " images</p>" : "") +
     "<p><a href=\"" + sheet.getParent().getUrl() + "\">Open the private review sheet</a></p>" +
     "<p style=\"color:#777\">Submission ID: " + html_(submissionId) + "</p>";
   MailApp.sendEmail({
@@ -371,6 +446,7 @@ function sendNewSubmissionEmail_(d, submissionId, sheet) {
 function initializeWorkflow() {
   var sheet = getSheet_();
   backfillSubmissionIds_(sheet);
+  backfillCarouselMetadata_(sheet);
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty("MANAGER_TOKEN");
   if (!token) {
@@ -382,6 +458,30 @@ function initializeWorkflow() {
   console.log("MANAGER_TOKEN=" + token);
   console.log("NOTIFICATION_EMAIL=" + (email || "not set"));
   return { managerToken: token, notificationEmail: email || "" };
+}
+
+function backfillCarouselMetadata_(sheet) {
+  if (sheet.getLastRow() < 2) return;
+  var rowCount = sheet.getLastRow() - 1;
+  var rows = sheet.getRange(2, 1, rowCount, HEADERS.length).getValues();
+  var metadata = [], changed = false;
+  for (var i = 0; i < rows.length; i++) {
+    var firstUrl = String(rows[i][11] || "");
+    var firstFileId = String(rows[i][12] || "");
+    var fileIds = parseJsonArray_(rows[i][20]);
+    var urls = parseJsonArray_(rows[i][21]);
+    if (!fileIds.length && firstFileId) { fileIds = [firstFileId]; changed = true; }
+    if (!urls.length && firstUrl) { urls = [firstUrl]; changed = true; }
+    var mediaCount = Number(rows[i][23] || fileIds.length || 0);
+    if (Number(rows[i][23] || 0) !== mediaCount) changed = true;
+    metadata.push([
+      fileIds.length ? JSON.stringify(fileIds) : "",
+      urls.length ? JSON.stringify(urls) : "",
+      String(rows[i][22] || ""),
+      mediaCount
+    ]);
+  }
+  if (changed) sheet.getRange(2, 21, rowCount, 4).setValues(metadata);
 }
 
 function requireManager_(token) {

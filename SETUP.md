@@ -21,7 +21,7 @@ Behind them sit the Sheet + Make, which you set up once.
 
 Keep both Make schedules **OFF** during the upgrade. Paste the new `Code.gs` into the existing Apps Script project, save it, run `initializeWorkflow()` once, then choose **Deploy ▸ Manage deployments ▸ Edit ▸ New version ▸ Deploy**. Reuse the same `/exec` URL. Only after that deployment is live should you publish the updated Studio and public form; the form's verified confirmation and the Studio review queue depend on the new endpoint.
 
-`initializeWorkflow()` adds columns P–T and backfills IDs on existing rows without changing the existing A–O data.
+`initializeWorkflow()` adds workflow columns P–X, backfills IDs, and adds ordered carousel metadata to existing single-image rows without changing the existing A–O data.
 
 ---
 
@@ -29,9 +29,9 @@ Keep both Make schedules **OFF** during the upgrade. Paste the new `Code.gs` int
 
 1. Go to **sheets.google.com** and create a blank sheet. Name it something like *UR ChemE IG*.
 2. Rename the first tab (bottom-left) to **`Posts`**.
-3. In **row 1**, type these 20 headers, one per cell, columns A through T:
+3. In **row 1**, type these 24 headers, one per cell, columns A through X:
 
-   `Timestamp` · `Submitter` · `Credit` · `Type` · `Title` · `Details` · `Date` · `Time` · `Location` · `Link` · `Caption` · `MediaURL` · `MediaFileId` · `VideoLink` · `Status` · `SubmissionId` · `PublishedAt` · `InstagramPostId` · `Error` · `SourceSubmissionId`
+   `Timestamp` · `Submitter` · `Credit` · `Type` · `Title` · `Details` · `Date` · `Time` · `Location` · `Link` · `Caption` · `MediaURL` · `MediaFileId` · `VideoLink` · `Status` · `SubmissionId` · `PublishedAt` · `InstagramPostId` · `Error` · `SourceSubmissionId` · `MediaFileIds` · `MediaURLs` · `OverlayCaptions` · `MediaCount`
 
 4. In the menu: **Extensions ▸ Apps Script**. A code editor opens in a new tab.
 5. Select all the sample code, delete it, and paste in **everything from `Code.gs`**. Click the **Save** icon.
@@ -83,11 +83,12 @@ Yes, GitHub is the right home — same as your applets. The studio has no secret
    - Spreadsheet: **UR ChemE IG**
    - Sheet: **Posts**
    - Table contains headers: **Yes**
-   - Header row: **A1:T1**
+   - Header row: **A1:X1**
 3. Add a filter between Google Sheets and the next module with both conditions:
    - `Status (O)` **Equal to** `Ready`
    - `Type (D)` **Does not equal to** `Video`
-   The second condition prevents a Reel cover from being posted accidentally as a normal photo.
+   - `MediaCount (X)` **Equal to** `1`
+   The type condition prevents a Reel cover from being posted accidentally as a normal photo; the media-count condition reserves carousels for the route below.
 4. Immediately after the filter, add **Google Sheets ▸ Update a Row**. Map the original row number and source values, then set `Status (O)` to `Processing` and clear `Error (S)`. This claims the row before any external publishing call.
 5. Add **Google Drive ▸ Download a File**. Map **File ID** to `MediaFileId (M)` from Watch New Rows.
 6. Add **Cloudinary ▸ Upload a Resource**. Connect with the Cloud name, API key, and API secret from your Cloudinary dashboard, then configure:
@@ -104,11 +105,28 @@ Yes, GitHub is the right home — same as your applets. The studio has no secret
 10. Save the scenario. Create one clearly labeled test post in the Studio and approve it. Confirm the Sheet row contains `Ready`, a caption, and a `MediaFileId`; then click **Run once** in Make. A successful run follows `Ready → Processing → Posted`.
 11. Delete the temporary Instagram test post, set the schedule (for example, every 15 minutes), and turn the scenario **ON**.
 
+### Build the carousel scenario
+
+Duplicate the working Photo scenario, rename the copy **UR ChemE — Carousels**, and make these changes:
+
+1. Keep **Google Sheets ▸ Watch New Rows** pointed at the same `Posts` sheet, with header row `A1:X1`.
+2. Use these filter conditions:
+   - `Status (O)` **Equal to** `Ready`
+   - `Type (D)` **Does not equal to** `Video`
+   - `MediaCount (X)` **Greater than** `1`
+3. Keep the first **Update a Row** step that claims the row as `Processing`.
+4. Parse the JSON array from `MediaFileIds (U)`, then iterate over it in order. For each file ID, use **Google Drive ▸ Download a File** followed by **Cloudinary ▸ Upload a Resource** with the same image settings as the Photo scenario.
+5. Add an array aggregator after Cloudinary and collect each upload's **Secure URL** in iterator order.
+6. Replace **Create a Photo Post** with **Instagram for Business (Facebook login) ▸ Create a Carousel Post**. Map the aggregated secure URLs as the carousel items and map `Caption (K)` as the one post caption.
+7. Keep the same `Posted`, `PublishedAt`, `InstagramPostId`, and error-handler updates. Test with a clearly labeled two-image carousel before turning the schedule on.
+
+`MediaFileIds (U)` preserves slide order. `OverlayCaptions (W)` records the optional text baked into each Plain-template slide for auditing; Instagram still receives the rendered JPEGs and the single traditional caption from column K.
+
 ### Build the Reel scenario
 
 Keep the working Photo scenario unchanged. Duplicate it, rename the copy **UR ChemE — Reels**, and configure the copy as follows:
 
-1. Keep **Google Sheets ▸ Watch New Rows** pointed at the same `Posts` sheet and header row `A1:T1`.
+1. Keep **Google Sheets ▸ Watch New Rows** pointed at the same `Posts` sheet and header row `A1:X1`.
 2. Replace the filter conditions with:
    - `Status (O)` **Equal to** `Ready`
    - `Type (D)` **Equal to** `Video`
@@ -142,13 +160,13 @@ Use an MP4 or MOV stored in Google Drive, shared as **Anyone with the link**, an
 ## Part 5 — Your day-to-day after setup
 
 1. For a colleague submission, open the Studio and click **Review queue ▸ Load into Studio**. Its text and submitted media are imported and the source row becomes `Reviewing`. For your own post, pick a type normally.
-2. Tweak the caption and the graphic.
-3. Download the graphic isn't required anymore — just hit **Approve**. It lands in the Sheet as **Ready** with the image attached.
+2. Tweak the traditional caption and the graphic. For a carousel, select **Plain photo + per-image text** to leave each image intact while adding a different optional overlay to each slide.
+3. Downloading the graphic isn't required anymore — just hit **Approve**. It lands in the Sheet as **Ready** with every rendered image attached in order.
 4. Make posts it on the next cycle. Done.
 
-The Studio exports Photo templates as a 1080×1350 JPEG (4:5), with text kept inside a centered safe area so Instagram's feed and profile-grid previews are less likely to need manual adjustment. Paper, event, and quote templates remain square; Reel covers remain 9:16.
+The Studio exports Photo and Plain templates as 1080×1350 JPEGs (4:5), with text kept inside a centered safe area so Instagram's feed and profile-grid previews are less likely to need manual adjustment. Paper, event, and quote templates remain square; Reel covers remain 9:16.
 
-Colleagues' submissions show up as **New** and never publish directly. Loading one imports its information and media into the Studio. Approving creates a clean **Ready** row and automatically changes the original submission to **Reviewed**. You can also reject or mark a submission reviewed without publishing it.
+Colleagues' submissions show up as **New** and never publish directly. The public form accepts up to 10 JPEG, PNG, or WebP images (8 MB each, 30 MB combined). Loading a submission imports all of its media into the Studio in carousel order. Approving creates a clean **Ready** row and automatically changes the original submission to **Reviewed**. You can also reject or mark a submission reviewed without publishing it.
 
 The public form includes a honeypot, server-side field/media validation, a global hourly submission limit, duplicate protection, and a confirmation poll that verifies the Sheet row exists before showing success. New submissions trigger an email when `NOTIFICATION_EMAIL` is configured.
 

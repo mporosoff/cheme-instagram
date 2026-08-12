@@ -41,9 +41,13 @@
   .type.on{background:var(--glow-bg);border-color:var(--glow);color:#8A2B0C;}
   .drop{border:1.5px dashed var(--line-strong);border-radius:10px;padding:20px;text-align:center;color:var(--slate);font-size:14px;cursor:pointer;background:var(--paper);transition:.12s;}
   .drop:hover{border-color:var(--glow);color:var(--glow);}
-  .preview{margin-top:10px;display:none;}
-  .preview img{max-width:100%;max-height:220px;border-radius:9px;border:1px solid var(--line);}
-  .preview button{margin-top:6px;background:none;border:none;color:var(--glow);font:inherit;font-size:13px;cursor:pointer;}
+  .preview{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .preview-item{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--paper);}
+  .preview-item img{display:block;width:100%;height:132px;object-fit:cover;}
+  .preview-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;font-size:12px;color:var(--slate);}
+  .preview-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .preview-actions{display:flex;align-items:center;gap:7px;flex:none;}
+  .preview button{flex:none;background:none;border:none;color:var(--glow);font:inherit;font-size:12px;cursor:pointer;padding:0;}
   .consent{display:flex;gap:10px;align-items:flex-start;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:13px;font-size:13.5px;color:var(--ink-soft);}
   .consent input{margin-top:3px;width:18px;height:18px;flex:none;accent-color:var(--glow);}
   .submit{width:100%;margin-top:6px;padding:14px;border:none;border-radius:10px;background:var(--glow);color:#fff;font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:16px;cursor:pointer;transition:.12s;}
@@ -88,10 +92,10 @@
 
     <label class="fld"><span class="lab">Details</span><textarea id="details" placeholder="Anything that helps us write a good caption — what's the finding, who's involved, why it matters..."></textarea></label>
 
-    <label class="fld"><span class="lab">Photo <span class="hint">(optional — drag in or tap)</span></span>
-      <div class="drop" id="drop">Tap to add a photo</div>
-      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" class="hide">
-      <div class="preview" id="preview"><img id="previewImg" alt=""><br><button id="removeImg" type="button">Remove</button></div>
+    <label class="fld"><span class="lab">Photos <span class="hint">(optional — add up to 10 in carousel order)</span></span>
+      <div class="drop" id="drop">Tap to add one or more photos</div>
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" multiple class="hide">
+      <div class="preview" id="preview" aria-live="polite"></div>
     </label>
 
     <label class="fld"><span class="lab">Reel or large video? <span class="hint">paste a Google Drive MP4 or MOV link; under 60 MB; set to "anyone with the link"</span></span><input type="text" id="videoLink" placeholder="https://drive.google.com/file/d/..."></label>
@@ -120,12 +124,14 @@ const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzolNKeTVSiRYK5yX2A3
 /* ============================================================== */
 
 const TYPES = ["Paper","Event","Photo","Video","Shout-out"];
-let activeType = "Paper", imageData = null, imageName = "", imageType = "", pendingSubmissionId = "";
+const MAX_IMAGES = 10, MAX_TOTAL_IMAGE_BYTES = 30 * 1024 * 1024;
+let activeType = "Paper", selectedImages = [], pendingSubmissionId = "";
 
 function renderTypes(){
   const c = document.getElementById("types"); c.innerHTML="";
   TYPES.forEach(t=>{
     const b=document.createElement("div"); b.className="type"+(t===activeType?" on":""); b.textContent=t;
+    if(t==="Photo")b.textContent="Photo / carousel";
     b.onclick=()=>{activeType=t;renderTypes();conditionals();};
     c.appendChild(b);
   });
@@ -139,22 +145,32 @@ const drop=document.getElementById("drop"), file=document.getElementById("file")
 drop.onclick=()=>file.click();
 drop.ondragover=e=>{e.preventDefault();drop.style.borderColor="var(--glow)";};
 drop.ondragleave=()=>{drop.style.borderColor="";};
-drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";readImg(e.dataTransfer.files[0]);};
-file.onchange=e=>readImg(e.target.files[0]);
-function readImg(f){
-  if(!f||!f.type.startsWith("image/"))return;
-  if(!/^image\/(jpeg|png|webp)$/.test(f.type)){showErr("Please use a JPEG, PNG, or WebP image.");return;}
-  if(f.size>8*1024*1024){ showErr("That image is over 8 MB — please use a smaller one, or share a link instead."); return; }
-  const r=new FileReader();
-  r.onload=()=>{ imageData=r.result.split(",")[1]; imageType=f.type; imageName=f.name;
-    document.getElementById("previewImg").src=r.result;
-    document.getElementById("preview").style.display="block";
-    drop.textContent="Photo added — tap to replace"; };
-  r.readAsDataURL(f);
+drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";addImages(e.dataTransfer.files);};
+file.onchange=e=>{addImages(e.target.files);file.value="";};
+async function addImages(fileList){
+  const files=Array.from(fileList||[]);if(!files.length)return;
+  if(selectedImages.length+files.length>MAX_IMAGES){showErr(`A carousel can contain up to ${MAX_IMAGES} photos.`);return;}
+  if(files.some(f=>!/^image\/(jpeg|png|webp)$/.test(f.type))){showErr("Please use JPEG, PNG, or WebP images.");return;}
+  if(files.some(f=>f.size>8*1024*1024)){showErr("Each image must be 8 MB or smaller.");return;}
+  const totalBytes=selectedImages.reduce((sum,image)=>sum+image.size,0)+files.reduce((sum,f)=>sum+f.size,0);
+  if(totalBytes>MAX_TOTAL_IMAGE_BYTES){showErr("Please keep the carousel under 30 MB total.");return;}
+  try{
+    const added=await Promise.all(files.map(readImageFile));
+    selectedImages=selectedImages.concat(added);renderImagePreviews();
+    document.getElementById("formErr").innerHTML="";
+  }catch(e){showErr("One of those images could not be read. Please try again.");}
 }
-document.getElementById("removeImg").onclick=()=>{imageData=null;document.getElementById("preview").style.display="none";drop.textContent="Tap to add a photo";};
+function readImageFile(f){
+  return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve({imageBase64:r.result.split(",")[1],imageType:f.type,imageName:f.name,size:f.size,dataUrl:r.result});r.onerror=reject;r.readAsDataURL(f);});
+}
+function renderImagePreviews(){
+  const preview=document.getElementById("preview");preview.innerHTML="";
+  selectedImages.forEach((image,index)=>{const item=document.createElement("div");item.className="preview-item";item.innerHTML=`<img src="${image.dataUrl}" alt="Selected photo ${index+1}"><div class="preview-meta"><span class="preview-name">${index+1}. ${escapeHtml(image.imageName)}</span><span class="preview-actions"><button type="button" data-move="-1" aria-label="Move photo ${index+1} earlier"${index===0?" disabled":""}>←</button><button type="button" data-move="1" aria-label="Move photo ${index+1} later"${index===selectedImages.length-1?" disabled":""}>→</button><button type="button" data-remove aria-label="Remove photo ${index+1}">Remove</button></span></div>`;item.querySelectorAll("[data-move]").forEach(button=>button.onclick=()=>{const target=index+Number(button.dataset.move),held=selectedImages[index];selectedImages[index]=selectedImages[target];selectedImages[target]=held;renderImagePreviews();});item.querySelector("[data-remove]").onclick=()=>{selectedImages.splice(index,1);renderImagePreviews();};preview.appendChild(item);});
+  drop.textContent=selectedImages.length?`${selectedImages.length} photo${selectedImages.length===1?"":"s"} added — tap to add more`:"Tap to add one or more photos";
+}
 
 function val(id){const e=document.getElementById(id);return e?(e.value||"").trim():"";}
+function escapeHtml(value){return String(value||"").replace(/[&<>\"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[char]));}
 function extractDriveFileId(input){
   const s=String(input||"").trim();
   if(/^[A-Za-z0-9_-]{20,}$/.test(s))return s;
@@ -176,12 +192,14 @@ document.getElementById("submitBtn").onclick=async function(){
 
   const btn=this; btn.disabled=true; btn.textContent="Sending and verifying…";
   if(!pendingSubmissionId)pendingSubmissionId=createSubmissionId();
+  const images=selectedImages.map(({imageBase64,imageType,imageName})=>({imageBase64,imageType,imageName}));
+  const firstImage=images[0]||{};
   const payload={
     submissionId:pendingSubmissionId,
     submitter:val("submitter"), credit:val("credit"), type:activeType, title:val("title"),
     details:val("details"), date:val("evDate"), time:val("evTime"), location:val("evLoc"),
-    link:val("link"), videoLink:videoFileId||val("videoLink"),
-    imageBase64:imageData||"", imageType, imageName, website:val("website"), consent:true
+    link:val("link"), videoLink:videoFileId||val("videoLink"), images,
+    imageBase64:images.length===1?(firstImage.imageBase64||""):"", imageType:images.length===1?(firstImage.imageType||""):"", imageName:images.length===1?(firstImage.imageName||""):"", website:val("website"), consent:true
   };
   try{
     await fetch(WEBAPP_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});

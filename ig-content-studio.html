@@ -75,6 +75,10 @@
   .thumb{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line);}
   .thumb img{width:100%;height:100%;object-fit:cover;}
   .thumb button{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;}
+  .thumb .order{position:absolute;left:3px;bottom:3px;min-width:20px;height:20px;padding:2px 5px;border-radius:10px;background:rgba(0,0,0,.72);color:#fff;font:600 11px "IBM Plex Mono",monospace;text-align:center;}
+  .thumb button.move-left,.thumb button.move-right{top:auto;bottom:2px;background:rgba(0,0,0,.72);}
+  .thumb button.move-left{right:22px;}
+  .thumb button.move-right{right:2px;}
 
   .glowbar{height:3px;border-radius:2px;background:var(--line);overflow:hidden;}
   .glowbar.on::before{content:"";display:block;height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--glow),#FFC78A,var(--glow),transparent);animation:ramp 1.1s ease-in-out infinite;}
@@ -103,7 +107,7 @@
 
   /* graphic tab */
   .canvas-wrap{display:flex;justify-content:center;background:var(--paper);border-radius:10px;padding:14px;border:1px solid var(--line);}
-  #card{width:100%;max-width:340px;height:auto;border-radius:6px;box-shadow:var(--shadow);display:block;}
+  #card{display:none;}
   .gctrls{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .gctrls .full{grid-column:1 / -1;}
   .gctrls label.fld{margin-bottom:0;}
@@ -120,6 +124,14 @@
   .style-choice input:focus-visible + .style-card{outline:2px solid #FFD82B;outline-offset:2px;}
   .swatches{display:flex;gap:4px;margin-top:auto;padding-top:8px;}
   .swatches i{display:block;width:18px;height:8px;border-radius:6px;border:1px solid rgba(0,0,0,.09);}
+  .slide-editor{grid-column:1 / -1;border:1px solid var(--line);border-radius:9px;background:var(--paper);padding:12px;}
+  .slide-editor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .slide-editor-head .btn{padding:5px 9px;}
+  .slide-strip{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 8px;}
+  .slide-choice{position:relative;flex:0 0 58px;height:58px;padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;background:#fff;}
+  .slide-choice.on{border-color:var(--glow);box-shadow:0 0 0 2px rgba(214,83,31,.12);}
+  .slide-choice img{width:100%;height:100%;object-fit:cover;display:block;}
+  .slide-choice span{position:absolute;left:3px;bottom:3px;min-width:18px;height:18px;padding:1px 4px;border-radius:9px;background:rgba(0,0,0,.72);color:#fff;font:600 10px "IBM Plex Mono",monospace;}
 
   /* queue */
   .queue-wrap{max-width:1240px;margin:0 auto 40px;padding:0 22px;}
@@ -285,11 +297,12 @@ function applyBranding(){document.getElementById("brandSub").textContent=getSett
 const TYPES=[
   {id:"paper",label:"Paper",icon:'<path d="M5 3h9l5 5v13H5z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.6"/>'},
   {id:"event",label:"Event",icon:'<rect x="4" y="5" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 9h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="1.6"/>'},
-  {id:"photo",label:"Photo",icon:'<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="11" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 18l5-4 4 3 3-3 2 2" fill="none" stroke="currentColor" stroke-width="1.6"/>'},
+  {id:"photo",label:"Photo / carousel",icon:'<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="11" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 18l5-4 4 3 3-3 2 2" fill="none" stroke="currentColor" stroke-width="1.6"/>'},
   {id:"repost",label:"Repost",icon:'<path d="M4 9V7a3 3 0 0 1 3-3h9l-2-2m2 2-2 2M20 15v2a3 3 0 0 1-3 3H8l2 2m-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'},
   {id:"reel",label:"Reel",icon:'<rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8h18M8 4l2.5 4M13 4l2.5 4" stroke="currentColor" stroke-width="1.6"/><path d="M10 12.5v3l3-1.5z" fill="currentColor"/>'}
 ];
 let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="", reviewSource=null;
+const MAX_CAROUSEL_IMAGES=10, MAX_CAROUSEL_BYTES=30*1024*1024;
 let reviewQueueItemsCache=null, reviewQueueListPromise=null, reviewQueueGeneration=0, reviewMediaLoadId=0;
 
 function renderTypes(){
@@ -319,8 +332,8 @@ function renderForm(){
     wireFigure();
   } else if(activeType==="photo"){
     const photoReady=photos.length>0;
-    a.innerHTML=`<div class="drop" id="drop">${photoReady?"Source image loaded ✓ — <b>click or drop to replace it</b>":"Drop a photo or <b>click to upload</b>"}<br><span style="font-size:12px">${photoReady?"Discovery supplied this image; verify credit and reuse rights before approval":"This image becomes the post — JPEG works best"}</span></div>
-      <input type="file" id="fileInput" accept="image/*" class="hide">
+    a.innerHTML=`<div class="drop" id="drop">${photoReady?`${photos.length} photo${photos.length===1?"":"s"} ready — <b>click or drop to add more</b>`:"Drop one or more photos or <b>click to upload</b>"}<br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span></div>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" multiple class="hide">
       <div class="thumbs" id="thumbs"></div>
       <label class="fld" style="margin-top:14px"><span class="lab">What's in the photo? <span class="hint">(helps the caption)</span></span><textarea id="photoNote" placeholder="e.g. Undergrad running the pulsed-Joule reactor..."></textarea></label>`;
     const drop=document.getElementById("drop"),fi=document.getElementById("fileInput");
@@ -357,9 +370,11 @@ function renderLoadedReviewBanner(){
   const a=document.getElementById("formArea");if(!a)return;
   const existing=a.querySelector(".loaded-review");if(existing)existing.remove();
   const box=document.createElement("div");box.className="meta-card loaded-review";
-  const imageState=reviewSource.imageBase64?"Source image loaded automatically":(reviewSource.mediaPending?"Source image is loading in the background":(reviewSource.mediaError||"No automatic source image found; upload remains optional"));
+  const loadedImageCount=(reviewSource.images||[]).length||(reviewSource.imageBase64?1:0);
+  const expectedImageCount=(reviewSource.mediaFileIds||[]).length||(reviewSource.mediaFileId?1:0);
+  const imageState=loadedImageCount?`${loadedImageCount} source image${loadedImageCount===1?"":"s"} loaded automatically`:(reviewSource.mediaPending?`${expectedImageCount>1?expectedImageCount+" source images are":"Source image is"} loading in the background`:(reviewSource.mediaError||"No automatic source image found; upload remains optional"));
   const sourceLink=safeSourceLink_(reviewSource.link);
-  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><div class="actions">${sourceLink?`<a href="${esc(sourceLink)}" target="_blank" rel="noopener noreferrer">Source</a>`:""}${reviewSource.mediaError&&reviewSource.mediaFileId?'<button type="button" data-a="retry-media">Retry image</button>':""}<button type="button" data-a="clear-review">Clear</button></div>`;
+  box.innerHTML=`<div><div class="t">Loaded from ${esc(reviewSource.submitter||"public submission")}</div><div class="m">${esc(reviewSource.type||"")} · ${esc(reviewSource.title||"")} · ${esc(imageState)} · ID ${esc(reviewSource.submissionId||"")}</div></div><div class="actions">${sourceLink?`<a href="${esc(sourceLink)}" target="_blank" rel="noopener noreferrer">Source</a>`:""}${reviewSource.mediaError&&expectedImageCount?'<button type="button" data-a="retry-media">Retry images</button>':""}<button type="button" data-a="clear-review">Clear</button></div>`;
   const clear=box.querySelector('[data-a="clear-review"]');if(clear)clear.onclick=()=>{reviewMediaLoadId++;reviewSource=null;renderForm();};
   const retry=box.querySelector('[data-a="retry-media"]');if(retry)retry.onclick=()=>loadReviewMedia_(reviewSource.submissionId,true);
   a.prepend(box);
@@ -414,9 +429,30 @@ function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; cancelPendin
 function renderFigThumb(){ const t=document.getElementById("figThumb"); if(!t)return; t.innerHTML=""; if(figure){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${figure.dataUrl}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{figure=null;renderFigThumb();if(currentGraphic){currentGraphic.figure=null;drawCard();}};t.appendChild(d);} }
 function renderPaperMeta(){const box=document.getElementById("paperMetaBox");if(!box||!paperMeta)return;box.innerHTML=`<div class="meta-card"><div class="t">${esc(paperMeta.title)}</div><div class="m">${esc(paperMeta.authors)}${paperMeta.journal?" · "+esc(paperMeta.journal):""}${paperMeta.year?" · "+paperMeta.year:""}</div></div>`;}
 
-/* ===== photo (becomes the post) ===== */
-function handlePhoto(list){const f=list[0];if(!f||!f.type.startsWith("image/"))return;cancelPendingReviewMedia_();const r=new FileReader();r.onload=()=>{photos=[{dataUrl:r.result,name:f.name,mediaType:f.type}];renderThumbs();};r.readAsDataURL(f);}
-function renderThumbs(){const t=document.getElementById("thumbs");if(!t)return;t.innerHTML="";photos.forEach((p,i)=>{const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${p.dataUrl}" alt=""><button>×</button>`;d.querySelector("button").onclick=()=>{photos.splice(i,1);renderThumbs();};t.appendChild(d);});}
+/* ===== photo / carousel (becomes the post) ===== */
+async function handlePhoto(list){
+  const files=Array.from(list||[]);if(!files.length)return;
+  if(photos.length+files.length>MAX_CAROUSEL_IMAGES){toast(`A carousel can contain up to ${MAX_CAROUSEL_IMAGES} images`);return;}
+  if(files.some(f=>!/^image\/(jpeg|png|webp)$/.test(f.type))){toast("Use JPEG, PNG, or WebP images");return;}
+  if(files.some(f=>f.size>8*1024*1024)){toast("Each image must be 8 MB or smaller");return;}
+  const existingBytes=photos.reduce((sum,p)=>sum+(p.size||0),0),newBytes=files.reduce((sum,f)=>sum+f.size,0);
+  if(existingBytes+newBytes>MAX_CAROUSEL_BYTES){toast("Keep carousel images under 30 MB total");return;}
+  cancelPendingReviewMedia_();
+  try{photos=photos.concat(await Promise.all(files.map(readPhotoFile_)));syncCurrentSlides_();renderThumbs();const drop=document.getElementById("drop");if(drop)drop.innerHTML=`${photos.length} photo${photos.length===1?"":"s"} ready — <b>click or drop to add more</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`;}
+  catch(e){toast("One of those images could not be read");}
+}
+function readPhotoFile_(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({dataUrl:reader.result,name:file.name,mediaType:file.type,size:file.size,overlayCaption:""});reader.onerror=reject;reader.readAsDataURL(file);});}
+function syncCurrentSlides_(){
+  if(!currentGraphic)return;
+  const previous=currentSlides||[];
+  currentSlides=photos.map(photo=>{const prior=previous.find(slide=>slide.dataUrl===photo.dataUrl);return{...photo,overlayCaption:(prior&&prior.overlayCaption)||photo.overlayCaption||""};});
+  activeSlideIndex=Math.min(activeSlideIndex,Math.max(0,currentSlides.length-1));
+  currentGraphic.figure=currentSlides[activeSlideIndex]?currentSlides[activeSlideIndex].dataUrl:null;
+  if(document.getElementById("cardDisp"))renderGraphicTab();
+}
+function renderThumbs(){const t=document.getElementById("thumbs");if(!t)return;t.innerHTML="";photos.forEach((p,i)=>{const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${p.dataUrl}" alt="Carousel image ${i+1}"><span class="order">${i+1}</span><button class="remove" aria-label="Remove image ${i+1}">×</button>${photos.length>1?`<button class="move-left" aria-label="Move image ${i+1} earlier"${i===0?" disabled":""}>←</button><button class="move-right" aria-label="Move image ${i+1} later"${i===photos.length-1?" disabled":""}>→</button>`:""}`;d.querySelector(".remove").onclick=()=>{photos.splice(i,1);syncCurrentSlides_();renderThumbs();updatePhotoDrop_();};const left=d.querySelector(".move-left"),right=d.querySelector(".move-right");if(left)left.onclick=()=>movePhoto_(i,-1);if(right)right.onclick=()=>movePhoto_(i,1);t.appendChild(d);});}
+function movePhoto_(index,direction){const target=index+direction;if(target<0||target>=photos.length)return;const held=photos[index];photos[index]=photos[target];photos[target]=held;syncCurrentSlides_();renderThumbs();}
+function updatePhotoDrop_(){const drop=document.getElementById("drop");if(!drop)return;drop.innerHTML=photos.length?`${photos.length} photo${photos.length===1?"":"s"} ready — <b>click or drop to add more</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`:`Drop one or more photos or <b>click to upload</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`;}
 
 /* ===== DOI via Crossref (slash-safe) ===== */
 async function fetchDoi(){
@@ -466,8 +502,9 @@ function buildBrief(){
     return{brief:b,withImage:!!reelCover,meta1:getSettings().handle,meta2:"",eyebrow:"Reel"};
   }
   if(activeType==="photo"){
+    if(!photos.length)return{error:"Add at least one photo first."};
     const note=val("photoNote");
-    let b="CONTENT TYPE: Photo post (lab life / people). Write a caption for the attached image.\n";
+    let b=`CONTENT TYPE: Photo ${photos.length>1?"carousel":"post"} (lab life / people). Write one traditional Instagram caption for the ${photos.length>1?"attached images":"attached image"}.\n`;
     if(note)b+=`Context: ${note}\n`;
     return{brief:b,withImage:true,meta1:getSettings().handle,meta2:"",eyebrow:""};
   }
@@ -525,7 +562,7 @@ Return ONLY valid JSON, no preamble, no code fences:
 function setLoading(on){document.getElementById("glowbar").className="glowbar"+(on?" on":"");const b=document.getElementById("draftBtn");b.disabled=on;b.textContent=on?"Generating…":"Generate post";}
 
 /* ===== output state ===== */
-let current=null, currentGraphic=null, activeTab="caption";
+let current=null, currentGraphic=null, currentSlides=[], activeSlideIndex=0, activeTab="caption";
 function reviewImageCredit(){
   const m=String(reviewSource&&reviewSource.details||"").match(/(?:^|\n)IMAGE CREDIT:\s*([^\n]+)/i);
   return m?m[1].trim():"";
@@ -570,15 +607,17 @@ function initOutput(p,built){
   const s=getSettings();
   const fallbackHeadline=built.headlineHint||(reviewSource&&reviewSource.title)||"";
   const graphicHeadline=p.headline||fallbackHeadline;
+  activeSlideIndex=0;
+  currentSlides=activeType==="photo"?photos.map((photo,index)=>({...photo,overlayCaption:photo.overlayCaption||((reviewSource&&reviewSource.overlayCaptions||[])[index])||""})):[];
   currentGraphic={
     template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
     theme:s.theme, accent:s.accent, stylePreset:s.stylePreset||"rochester", logo:s.logo||"",
     headline:graphicHeadline, subhead:p.subhead||"",
     pull_quote:p.pull_quote||p.subhead||graphicHeadline, eyebrow:built.eyebrow||"",
     meta1:built.meta1||"", meta2:built.meta2||"",
-    figure: activeType==="photo"?(photos[0]&&photos[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
+    figure: activeType==="photo"?(currentSlides[0]&&currentSlides[0].dataUrl):(activeType==="reel"?reelCover:(figure&&figure.dataUrl)),
     handle:s.handle, dept:s.dept, reelStyle:"underline",
-    imageFit:(activeType==="photo"||activeType==="reel")?"cover":"contain"
+    imageFit:activeType==="photo"?"contain":(activeType==="reel"?"cover":"contain")
   };
   renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
 }
@@ -642,6 +681,10 @@ function renderGraphicTab(){
   const g=currentGraphic;
   const isReel=current.type==="reel";
   if(isReel)g.template="reel";
+  activeSlideIndex=Math.min(activeSlideIndex,Math.max(0,currentSlides.length-1));
+  if(current.type==="photo"&&currentSlides[activeSlideIndex])g.figure=currentSlides[activeSlideIndex].dataUrl;
+  const isPlain=g.template==="plain";
+  const hasCarousel=current.type==="photo"&&currentSlides.length>1;
   const initialSize=graphicSize(g.template);
   const formatControl=isReel
     ? `<label class="fld full"><span class="lab">Format</span><input type="text" value="Reel cover (9:16)" disabled></label>`
@@ -650,7 +693,8 @@ function renderGraphicTab(){
           <option value="paper"${g.template==="paper"?" selected":""}>Paper card (1:1)</option>
           <option value="event"${g.template==="event"?" selected":""}>Event card (1:1)</option>
           <option value="quote"${g.template==="quote"?" selected":""}>Quote / spotlight (1:1)</option>
-          <option value="photo"${g.template==="photo"?" selected":""}>Photo + overlay (4:5)</option>
+          <option value="photo"${g.template==="photo"?" selected":""}>Photo + branded overlay (4:5)</option>
+          ${current.type==="photo"?`<option value="plain"${isPlain?" selected":""}>Plain photo + per-image text (4:5)</option>`:""}
         </select></label>`;
   const layoutControl=isReel
     ? `<label class="fld full"><span class="lab">Reel design</span>
@@ -659,15 +703,15 @@ function renderGraphicTab(){
           <option value="panel"${g.reelStyle==="panel"?" selected":""}>Framed panel</option>
           <option value="banner"${g.reelStyle==="banner"?" selected":""}>Center banner</option>
         </select></label>`:"";
-  const presetControl=`<div class="full">
+  const presetControl=isPlain?"":`<div class="full">
       <span style="display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">Visual style</span>
       <div class="style-grid">${stylePresetCards(g.stylePreset||"rochester")}</div>
       <span class="hint" style="display:block;font-size:11.5px;margin-top:6px">Rochester presets use approved University colors and typography. Studio Classic preserves the original design.</span>
     </div>`;
-  const classicControls=(g.stylePreset||"rochester")==="classic"?`
+  const classicControls=!isPlain&&(g.stylePreset||"rochester")==="classic"?`
       <label class="fld"><span class="lab">Classic theme</span><div class="seg" id="gTheme"><button data-v="dark" class="${g.theme==="dark"?"on":""}">Dark</button><button data-v="light" class="${g.theme==="light"?"on":""}">Light</button></div></label>
       <label class="fld"><span class="lab">Classic accent</span><input type="color" id="gAccent" value="${g.accent}"></label>`:"";
-  const detailControls=isReel?"":`
+  const detailControls=isReel||isPlain?"":`
       <label class="fld full"><span class="lab" id="subLab">Subhead</span><input type="text" id="gSub" value="${esc(g.template==="quote"?g.pull_quote:g.subhead)}"></label>
       <label class="fld"><span class="lab">Detail line 1</span><input type="text" id="gM1" value="${esc(g.meta1)}"></label>
       <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>`;
@@ -677,39 +721,53 @@ function renderGraphicTab(){
           <option value="contain"${(g.imageFit||"contain")==="contain"?" selected":""}>Show entire image</option>
           <option value="cover"${g.imageFit==="cover"?" selected":""}>Fill frame (crop edges)</option>
         </select>
-        <span class="hint">“Show entire image” preserves every edge; photo overlays fill unused space with a softened copy instead of blank bands.</span>
+        <span class="hint">“Show entire image” preserves every edge; unused space is filled with a softened copy instead of blank bands.</span>
       </label>`:"";
+  const slideControl=current.type==="photo"&&currentSlides.length?`
+      <div class="slide-editor">
+        <div class="slide-editor-head"><span class="lab" style="margin:0">Image ${activeSlideIndex+1} of ${currentSlides.length}${hasCarousel?" · carousel order":""}</span><div><button class="btn ghost sm" id="prevSlide"${activeSlideIndex===0?" disabled":""}>←</button><button class="btn ghost sm" id="nextSlide"${activeSlideIndex===currentSlides.length-1?" disabled":""}>→</button></div></div>
+        <div class="slide-strip">${currentSlides.map((slide,index)=>`<button type="button" class="slide-choice${index===activeSlideIndex?" on":""}" data-slide="${index}" aria-label="Edit image ${index+1}"><img src="${slide.dataUrl}" alt=""><span>${index+1}</span></button>`).join("")}</div>
+        ${isPlain?`<label class="fld" style="margin:4px 0 0"><span class="lab">Text layered on image ${activeSlideIndex+1} <span class="hint">(optional; unique to this image)</span></span><textarea id="gSlideCaption" maxlength="500" placeholder="Leave blank to keep this image unchanged">${esc(currentSlides[activeSlideIndex].overlayCaption||"")}</textarea></label><span class="hint">This text appears only on the image. The traditional Instagram caption stays separate in the Caption tab.</span>`:`<span class="hint">Preview each image. The selected template is applied to every slide.</span>`}
+      </div>`:"";
+  const headlineControl=isPlain?"":`<label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>`;
   a.innerHTML=`
     <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
     <div class="gctrls">
       ${formatControl}
+      ${slideControl}
       ${presetControl}
       ${layoutControl}
       ${classicControls}
       ${imageFitControl}
-      <label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>
+      ${headlineControl}
       ${detailControls}
     </div>
-    <div class="out-acts"><button class="btn primary" id="dlGraphic">Download JPEG (${initialSize.label})</button><button class="btn green" id="approveBtn">Approve → queue</button></div>`;
+    <div class="out-acts"><button class="btn primary" id="dlGraphic">Download ${hasCarousel?`slide ${activeSlideIndex+1}`:"JPEG"} (${initialSize.label})</button>${hasCarousel?'<button class="btn" id="dlAllGraphics">Download all slides</button>':""}<button class="btn green" id="approveBtn">Approve${hasCarousel?` ${currentSlides.length}-image carousel`:""} → queue</button></div>`;
   const redraw=()=>{
-    if(!isReel)g.template=v("gTemplate");
     if(document.getElementById("gAccent"))g.accent=v("gAccent")||g.accent;
-    g.headline=v("gHead");
+    if(document.getElementById("gHead"))g.headline=v("gHead");
     if(document.getElementById("gImageFit"))g.imageFit=v("gImageFit")||"contain";
     if(isReel)g.reelStyle=v("gReelStyle")||"underline";
-    else{
+    else if(!isPlain){
       if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
       g.meta1=v("gM1"); g.meta2=v("gM2");
       document.getElementById("subLab").textContent=g.template==="quote"?"Quote text":"Subhead";
     }
     const dc=document.getElementById("cardDisp"); if(dc)dc.style.maxWidth=previewWidth(g.template);
-    const dl=document.getElementById("dlGraphic"); if(dl)dl.textContent=`Download JPEG (${graphicSize(g.template).label})`;
+    const dl=document.getElementById("dlGraphic"); if(dl)dl.textContent=`Download ${hasCarousel?`slide ${activeSlideIndex+1}`:"JPEG"} (${graphicSize(g.template).label})`;
     drawCard("cardDisp");
   };
-  ["gTemplate","gReelStyle","gAccent","gImageFit","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
+  ["gReelStyle","gAccent","gImageFit","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
+  const template=document.getElementById("gTemplate");if(template)template.onchange=()=>{g.template=template.value;if(g.template==="plain")g.imageFit="contain";renderGraphicTab();};
   document.querySelectorAll('input[name="gStyle"]').forEach(r=>r.onchange=()=>{if(!r.checked)return;redraw();g.stylePreset=r.value;renderGraphicTab();});
   document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));drawCard("cardDisp");});
+  document.querySelectorAll(".slide-choice").forEach(button=>button.onclick=()=>{activeSlideIndex=Number(button.dataset.slide)||0;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();});
+  const prev=document.getElementById("prevSlide"),next=document.getElementById("nextSlide");
+  if(prev)prev.onclick=()=>{if(activeSlideIndex>0){activeSlideIndex--;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();}};
+  if(next)next.onclick=()=>{if(activeSlideIndex<currentSlides.length-1){activeSlideIndex++;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();}};
+  const slideCaption=document.getElementById("gSlideCaption");if(slideCaption)slideCaption.oninput=()=>{currentSlides[activeSlideIndex].overlayCaption=slideCaption.value;drawCard("cardDisp");};
   document.getElementById("dlGraphic").onclick=downloadGraphic;
+  const downloadAll=document.getElementById("dlAllGraphics");if(downloadAll)downloadAll.onclick=downloadAllGraphics;
   document.getElementById("approveBtn").onclick=approve;
   drawCard("cardDisp");
 }
@@ -731,6 +789,20 @@ function photoImageDraw(ctx,img,W,H,fit){
   // copy supplies color behind unusually wide or tall source images.
   ctx.save();ctx.filter="blur(32px) brightness(.62) saturate(.88)";coverDraw(ctx,img,-40,-40,W+80,H+80);ctx.restore();
   containDraw(ctx,img,0,0,W,H,0);
+}
+function drawPlainPhoto(ctx,img,caption,W,H,fit){
+  ctx.clearRect(0,0,W,H);
+  if(img)photoImageDraw(ctx,img,W,H,fit||"contain");else{ctx.fillStyle="#1C1B19";ctx.fillRect(0,0,W,H);}
+  const text=String(caption||"").trim();if(!text)return;
+  const P=72;
+  const fitted=fitLines(ctx,text,{maxW:W-P*2,maxH:260,weight:"700",family:"'Inter'",max:52,min:30,lh:1.18});
+  const lines=fitted.lines.slice(0,4);
+  if(fitted.lines.length>4)lines[3]=clip(ctx,lines[3]+"…",W-P*2,`700 ${fitted.size}px 'Inter'`);
+  const lineHeight=fitted.size*1.18,boxHeight=lines.length*lineHeight+68,boxY=H-110-boxHeight;
+  const grad=ctx.createLinearGradient(0,boxY-150,0,H);grad.addColorStop(0,"rgba(0,0,0,0)");grad.addColorStop(1,"rgba(0,0,0,.76)");ctx.fillStyle=grad;ctx.fillRect(0,boxY-150,W,H-boxY+150);
+  ctx.fillStyle="rgba(0,0,0,.62)";ctx.fillRect(0,boxY,W,boxHeight);
+  ctx.font=`700 ${fitted.size}px 'Inter'`;ctx.fillStyle="#FFFFFF";ctx.textBaseline="top";
+  let y=boxY+34;lines.forEach(line=>{ctx.fillText(line,P,y);y+=lineHeight;});
 }
 function hexRgba(hex,alpha){const h=String(hex||"#000000").replace("#",""),n=parseInt(h.length===3?h.split("").map(c=>c+c).join(""):h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;}
 function angularPanel(ctx,x,y,w,h,cut,fill){
@@ -885,12 +957,12 @@ function drawBrandCard(ctx,g,fig,W,H,P,reel,s,logo){
 }
 function graphicSize(template){
   if(template==="reel")return{width:1080,height:1920,label:"1080×1920"};
-  if(template==="photo")return{width:1080,height:1350,label:"1080×1350"};
+  if(template==="photo"||template==="plain")return{width:1080,height:1350,label:"1080×1350"};
   return{width:1080,height:1080,label:"1080×1080"};
 }
-function previewWidth(template){return template==="reel"?"230px":template==="photo"?"300px":"340px";}
+function previewWidth(template){return template==="reel"?"230px":(template==="photo"||template==="plain")?"300px":"340px";}
 
-async function drawCard(canvasId){
+async function drawCard(canvasId,slideIndex){
   await ensureFonts();
   const g=currentGraphic; if(!g)return;
   const canvas=document.getElementById(canvasId||"cardDisp")||document.getElementById("card");
@@ -899,7 +971,14 @@ async function drawCard(canvasId){
   const W=size.width, H=size.height, P=92;
   canvas.width=W; canvas.height=H;
   const ctx=canvas.getContext("2d");
-  const fig = g.figure ? await loadImg(g.figure) : null;
+  const resolvedSlideIndex=typeof slideIndex==="number"?slideIndex:activeSlideIndex;
+  const slide=current&&current.type==="photo"?currentSlides[resolvedSlideIndex]:null;
+  const figureSource=slide&&slide.dataUrl?slide.dataUrl:g.figure;
+  const fig = figureSource ? await loadImg(figureSource) : null;
+  if(g.template==="plain"){
+    drawPlainPhoto(ctx,fig,slide&&slide.overlayCaption,W,H,g.imageFit||"contain");
+    return paint(canvasId);
+  }
   const branded=brandStyle(g);
   if(branded.id!=="classic"){
     const logoSet=BRAND_LOGOS[branded.id]||{};
@@ -1025,10 +1104,37 @@ async function drawCard(canvasId){
 function clip(ctx,text,maxW,font){ctx.font=font;if(ctx.measureText(text).width<=maxW)return text;let t=text;while(t.length>1&&ctx.measureText(t+"…").width>maxW)t=t.slice(0,-1);return t+"…";}
 function paint(canvasId){ /* canvas already drawn directly to display canvas */ }
 
-function downloadGraphic(){
-  const disp=document.getElementById("cardDisp");if(!disp)return;
-  try{const a=document.createElement("a");a.href=disp.toDataURL("image/jpeg",0.92);a.download=(currentGraphic.template||"post")+`-${disp.width}x${disp.height}.jpg`;a.click();toast("Graphic downloaded ✓");}
+function downloadCanvas_(canvas,index){
+  const a=document.createElement("a"),slide=currentSlides[index];
+  a.href=canvas.toDataURL("image/jpeg",0.92);
+  a.download=(currentGraphic.template||"post")+(currentSlides.length?`-slide-${String(index+1).padStart(2,"0")}`:"")+`-${canvas.width}x${canvas.height}.jpg`;
+  a.click();
+}
+async function downloadGraphic(){
+  const exportCanvas=document.getElementById("card");if(!exportCanvas)return;
+  try{await drawCard("card",activeSlideIndex);downloadCanvas_(exportCanvas,activeSlideIndex);toast(currentSlides.length>1?`Slide ${activeSlideIndex+1} downloaded ✓`:"Graphic downloaded ✓");}
   catch(e){toast("Export failed — try a different image");}
+}
+async function downloadAllGraphics(){
+  const exportCanvas=document.getElementById("card");if(!exportCanvas)return;
+  try{
+    for(let index=0;index<currentSlides.length;index++){await drawCard("card",index);downloadCanvas_(exportCanvas,index);await new Promise(resolve=>setTimeout(resolve,120));}
+    await drawCard("cardDisp",activeSlideIndex);toast(`${currentSlides.length} carousel slides downloaded ✓`);
+  }catch(e){toast("Carousel export failed — try downloading each slide");}
+}
+async function renderedApprovalImages_(){
+  const exportCanvas=document.getElementById("card"),count=current&&current.type==="photo"?currentSlides.length:1,out=[];
+  for(let index=0;index<count;index++){
+    await drawCard("card",index);
+    out.push({
+      imageBase64:exportCanvas.toDataURL("image/jpeg",0.92).split(",")[1],
+      imageType:"image/jpeg",
+      imageName:(currentGraphic.template||"post")+(count>1?`-slide-${String(index+1).padStart(2,"0")}`:"")+".jpg",
+      overlayCaption:(currentSlides[index]&&currentSlides[index].overlayCaption)||""
+    });
+  }
+  if(document.getElementById("cardDisp"))await drawCard("cardDisp",activeSlideIndex);
+  return out;
 }
 
 /* ===== queue ===== */
@@ -1047,15 +1153,19 @@ async function approve(){
   if(!current)return;
   current.caption=withReviewImageCredit(current.caption);
   const sourceLink=approvalSourceLink_();
-  const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,sourceLink,date:new Date().toISOString()});setQueue(q);
+  const slideCount=current.type==="photo"?currentSlides.length:1;
+  const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,sourceLink,slideCount,date:new Date().toISOString()});setQueue(q);
   const url=(getSettings().publishUrl||"").trim();
   if(url.indexOf("http")===0){
-    let img="";const disp=document.getElementById("cardDisp");
-    if(disp){try{img=disp.toDataURL("image/jpeg",0.92).split(",")[1];}catch(e){}}
+    const approveBtn=document.getElementById("approveBtn");if(approveBtn){approveBtn.disabled=true;approveBtn.textContent="Preparing images…";}
+    let images=[];
+    try{images=await renderedApprovalImages_();}catch(e){if(approveBtn){approveBtn.disabled=false;approveBtn.textContent="Approve → queue";}toast("Could not prepare the carousel");return;}
+    const firstImage=images[0]||{};
     const fullCaption=current.caption+(current.hashtags.length?"\n\n"+current.hashtags.map(h=>"#"+h).join(" "):"");
-    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||"",caption:fullCaption,details:current.alt_text||"",link:sourceLink,videoLink:(current.type==="reel"?reelVideoLink:""),imageBase64:img,imageType:"image/jpeg",imageName:((currentGraphic&&currentGraphic.template)||"post")+".jpg",sourceSubmissionId:reviewSource?reviewSource.submissionId:"",consent:true};
-    try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast(reviewSource?"Approved and marked reviewed ✓":"Sent to the IG publishing queue ✓");}
+    const payload={source:"studio",submitter:"Content Studio",type:(current.type==="reel"?"Video":current.type),title:(currentGraphic&&currentGraphic.headline)||(reviewSource&&reviewSource.title)||"Instagram post",caption:fullCaption,details:current.alt_text||"",link:sourceLink,videoLink:(current.type==="reel"?reelVideoLink:""),images,imageBase64:images.length===1?(firstImage.imageBase64||""):"",imageType:images.length===1?(firstImage.imageType||"image/jpeg"):"",imageName:images.length===1?(firstImage.imageName||"post.jpg"):"",sourceSubmissionId:reviewSource?reviewSource.submissionId:"",consent:true};
+    try{await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});toast(reviewSource?`Approved${slideCount>1?` ${slideCount}-image carousel`:""} and marked reviewed ✓`:`Sent${slideCount>1?` ${slideCount}-image carousel`:""} to the IG publishing queue ✓`);}
     catch(e){toast("Saved locally — couldn't reach the queue");}
+    if(approveBtn){approveBtn.disabled=false;approveBtn.textContent=slideCount>1?`Approve ${slideCount}-image carousel → queue`:"Approve → queue";}
   } else {
     toast("Approved ✓  (download the graphic too)");
   }
@@ -1094,7 +1204,8 @@ function renderReviewItems_(items,checking){
   grid.innerHTML="";
   list.forEach(item=>{
     const card=document.createElement("div");card.className="review-card";card.dataset.submissionId=item.submissionId||"";
-    card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${item.mediaFileId?' <span class="qcount">Image ready</span>':''}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
+    const mediaCount=Number(item.mediaCount)||((item.mediaFileIds||[]).length)||(item.mediaFileId?1:0);
+    card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${mediaCount?` <span class="qcount">${mediaCount>1?mediaCount+"-image carousel":"Image ready"}</span>`:""}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
     card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId,card);
     card.querySelector('[data-a="done"]').onclick=()=>reviewStatus(item.submissionId,"Reviewed",card);
     card.querySelector('[data-a="reject"]').onclick=()=>{if(confirm(`Reject “${item.title||"this submission"}”?`))reviewStatus(item.submissionId,"Rejected",card);};
@@ -1182,39 +1293,46 @@ async function loadReviewSubmission(submissionId,card){
   try{
     const data=await queueJsonp("detail",{submissionId,markReviewing:"1",includeMedia:"0"});
     if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
-    const needsMedia=!!data.item.mediaFileId&&!data.item.imageBase64;
+    const mediaIds=(data.item.mediaFileIds||[]).length?data.item.mediaFileIds:(data.item.mediaFileId?[data.item.mediaFileId]:[]);
+    const needsMedia=!!mediaIds.length&&!data.item.imageBase64;
     data.item.mediaPending=needsMedia;
     updateCachedReviewStatus_(submissionId,"Reviewing");
     applyReviewSubmission(data.item);
     if(reviewModal&&reviewModal.isConnected)reviewModal.remove();
-    toast(data.item.imageBase64?"Submission and source image loaded ✓":(needsMedia?"Submission loaded ✓ — source image is loading":"Submission loaded ✓ — no automatic source image was available"));
+    toast(data.item.imageBase64?"Submission and source image loaded ✓":(needsMedia?`Submission loaded ✓ — ${mediaIds.length>1?mediaIds.length+" source images are":"source image is"} loading`:"Submission loaded ✓ — no automatic source image was available"));
     if(needsMedia)loadReviewMedia_(submissionId,false);
   }catch(e){setReviewCardBusy_(card,false);if(state)state.innerHTML=`<div class="err">${esc(reviewQueueErrorMessage_(e))}</div>`;}
 }
 async function loadReviewMedia_(submissionId,isRetry){
   if(!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
   const loadId=++reviewMediaLoadId;
+  const mediaIds=(reviewSource.mediaFileIds||[]).length?reviewSource.mediaFileIds:(reviewSource.mediaFileId?[reviewSource.mediaFileId]:[]);
   reviewSource.mediaPending=true;reviewSource.mediaError="";renderLoadedReviewBanner();
-  if(isRetry)toast("Retrying the source image…");
+  if(isRetry)toast(`Retrying ${mediaIds.length>1?"the source images":"the source image"}…`);
   try{
-    const data=await queueJsonp("media",{submissionId});
+    const responses=await Promise.all(mediaIds.map((mediaFileId,index)=>queueJsonp("media",{submissionId,mediaIndex:String(index)}).catch(error=>({ok:false,error:String(error&&error.message||error),mediaFileId}))));
     if(loadId!==reviewMediaLoadId||!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
-    if(!data.ok||!data.item)throw new Error(data.error||"Source image could not be loaded");
-    if(!data.item.imageBase64)throw new Error(data.item.mediaError||"No usable source image was returned");
-    applyReviewMedia_(data.item);toast("Source image loaded ✓");
+    const images=responses.filter(data=>data.ok&&data.item&&data.item.imageBase64).map(data=>data.item);
+    if(!images.length){const failed=responses.find(data=>!data.ok||(data.item&&!data.item.imageBase64));throw new Error((failed&&((failed.item&&failed.item.mediaError)||failed.error))||"No usable source image was returned");}
+    applyReviewMedia_({submissionId,images});
+    const failedCount=mediaIds.length-images.length;
+    if(failedCount){reviewSource.mediaError=`${failedCount} image${failedCount===1?"":"s"} could not be loaded.`;renderLoadedReviewBanner();}
+    toast(failedCount?`${images.length} of ${mediaIds.length} source images loaded`:`${images.length>1?images.length+" source images":"Source image"} loaded ✓`);
   }catch(e){
     if(loadId!==reviewMediaLoadId||!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
     reviewSource.mediaPending=false;reviewSource.mediaError=/unknown action/i.test(String(e&&e.message||e))?"Update the Apps Script deployment to enable background image loading.":reviewQueueErrorMessage_(e);
-    renderLoadedReviewBanner();toast("The submission is ready; its source image can be retried separately");
+    renderLoadedReviewBanner();toast(`The submission is ready; its source image${mediaIds.length===1?"":"s"} can be retried separately`);
   }
 }
 function applyReviewMedia_(item){
   if(!reviewSource||String(reviewSource.submissionId)!==String(item.submissionId))return;
-  reviewSource.imageBase64=item.imageBase64||"";reviewSource.imageType=item.imageType||"image/jpeg";reviewSource.imageName=item.imageName||"submission.jpg";reviewSource.mediaPending=false;reviewSource.mediaError="";
-  const dataUrl=`data:${reviewSource.imageType};base64,${reviewSource.imageBase64}`;
+  const sourceImages=(item.images&&item.images.length?item.images:[item]).filter(image=>image&&image.imageBase64).map((image,index)=>({...image,dataUrl:`data:${image.imageType||"image/jpeg"};base64,${image.imageBase64}`,overlayCaption:image.overlayCaption||((reviewSource.overlayCaptions||[])[index])||""}));
+  if(!sourceImages.length)return;
+  const first=sourceImages[0];reviewSource.images=sourceImages;reviewSource.imageBase64=first.imageBase64;reviewSource.imageType=first.imageType||"image/jpeg";reviewSource.imageName=first.imageName||"submission.jpg";reviewSource.mediaPending=false;reviewSource.mediaError="";
+  const dataUrl=first.dataUrl;
   if(activeType==="photo"){
-    photos=[{dataUrl,name:reviewSource.imageName,mediaType:reviewSource.imageType}];renderThumbs();
-    const drop=document.getElementById("drop");if(drop)drop.innerHTML='Source image loaded ✓ — <b>click or drop to replace it</b><br><span style="font-size:12px">Verify credit and reuse rights before approval</span>';
+    photos=sourceImages.map(image=>({dataUrl:image.dataUrl,name:image.imageName||"submission.jpg",mediaType:image.imageType||"image/jpeg",overlayCaption:image.overlayCaption||"",size:0}));syncCurrentSlides_();renderThumbs();
+    const drop=document.getElementById("drop");if(drop)drop.innerHTML=`${photos.length} source image${photos.length===1?"":"s"} loaded ✓ — <b>click or drop to add more</b><br><span style="font-size:12px">Verify credit and reuse rights before approval</span>`;
   }else if(activeType==="reel"){
     reelCover=dataUrl;renderReelThumb();
   }else{
@@ -1225,12 +1343,12 @@ function applyReviewMedia_(item){
   renderLoadedReviewBanner();
 }
 function applyReviewSubmission(item){
-  reviewSource=item;paperMeta=null;photos=[];figure=null;reelCover=null;reelVideoLink="";
+  reviewSource=item;paperMeta=null;photos=[];figure=null;reelCover=null;reelVideoLink="";currentSlides=[];activeSlideIndex=0;
   const map={Paper:"paper",Event:"event",Photo:"photo",Video:"reel","Shout-out":"repost"};
   activeType=map[item.type]||"photo";
   const dataUrl=item.imageBase64?`data:${item.imageType||"image/jpeg"};base64,${item.imageBase64}`:"";
   if(dataUrl){
-    if(activeType==="photo")photos=[{dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"}];
+    if(activeType==="photo")photos=[{dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg",overlayCaption:(item.overlayCaptions||[])[0]||"",size:0}];
     else if(activeType==="reel")reelCover=dataUrl;
     else figure={dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"};
   }
