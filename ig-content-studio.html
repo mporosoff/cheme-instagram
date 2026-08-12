@@ -1260,7 +1260,7 @@ function renderReviewItems_(items,checking){
   state.textContent=(list.length?`${list.length} submission${list.length===1?"":"s"} waiting`:"Nothing is waiting for review.")+(checking?" · checking for updates…":"");
   grid.innerHTML="";
   list.forEach(item=>{
-    const card=document.createElement("div");card.className="review-card";card.dataset.submissionId=item.submissionId||"";
+    const card=document.createElement("div");card.className="review-card";card.dataset.submissionId=item.submissionId||"";card.dataset.rowNumber=item.rowNumber||"";
     const mediaCount=Number(item.mediaCount)||((item.mediaFileIds||[]).length)||(item.mediaFileId?1:0);
     card.innerHTML=`<div><span class="pill">${esc(item.type||"Submission")}</span> <span class="qcount">${esc(item.status)}</span>${mediaCount?` <span class="qcount">${mediaCount>1?mediaCount+"-image carousel":"Image ready"}</span>`:""}</div><h3>${esc(item.title||"Untitled")}</h3><div class="meta">${esc(item.submitter||"Unknown")} · ${item.timestamp?new Date(item.timestamp).toLocaleDateString():""}</div><div class="desc">${esc(item.details||item.credit||"No additional details")}</div><div class="actions">${item.link?`<a class="btn sm" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">Open source</a>`:""}<button class="btn primary sm" data-a="load">Load into Studio</button><button class="btn sm" data-a="done">Mark reviewed</button><button class="btn ghost sm" data-a="reject">Reject</button></div>`;
     card.querySelector('[data-a="load"]').onclick=()=>loadReviewSubmission(item.submissionId,card);
@@ -1330,14 +1330,15 @@ function updateCachedReviewStatus_(submissionId,status){
   if(status==="New"||status==="Reviewing")reviewQueueItemsCache=reviewQueueItemsCache.map(item=>String(item.submissionId)===String(submissionId)?{...item,status}:item);
   else reviewQueueItemsCache=reviewQueueItemsCache.filter(item=>String(item.submissionId)!==String(submissionId));
 }
-async function legacyReviewStatus_(submissionId,status){
-  await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status})});
+async function legacyReviewStatus_(submissionId,status,rowNumber){
+  await fetch((getSettings().publishUrl||"").trim(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"managerUpdate",managerToken:getManagerToken(),submissionId,status,rowNumber})});
 }
 async function reviewStatus(submissionId,status,card){
   setReviewCardBusy_(card,true);
+  const rowNumber=card&&card.dataset.rowNumber||"";
   try{
-    const data=await queueJsonp("update",{submissionId,status});
-    if(!data.ok&&/unknown action/i.test(data.error||""))await legacyReviewStatus_(submissionId,status);
+    const data=await queueJsonp("update",{submissionId,status,rowNumber});
+    if(!data.ok&&/unknown action/i.test(data.error||""))await legacyReviewStatus_(submissionId,status,rowNumber);
     else if(!data.ok)throw new Error(data.error||"Could not update that submission.");
     updateCachedReviewStatus_(submissionId,status);
     if(card)card.remove();updateReviewQueueCount_();toast(`Marked ${status.toLowerCase()} ✓`);return true;
@@ -1345,10 +1346,11 @@ async function reviewStatus(submissionId,status,card){
 }
 async function loadReviewSubmission(submissionId,card){
   const state=document.getElementById("reviewState"),reviewModal=card&&card.closest(".scrim");
+  const rowNumber=card&&card.dataset.rowNumber||"";
   if(state)state.textContent="Loading submission details…";
   setReviewCardBusy_(card,true);
   try{
-    const data=await queueJsonp("detail",{submissionId,markReviewing:"1",includeMedia:"0"});
+    const data=await queueJsonp("detail",{submissionId,markReviewing:"1",includeMedia:"0",rowNumber});
     if(!data.ok||!data.item)throw new Error(data.error||"Submission could not be loaded");
     const mediaIds=(data.item.mediaFileIds||[]).length?data.item.mediaFileIds:(data.item.mediaFileId?[data.item.mediaFileId]:[]);
     const needsMedia=!!mediaIds.length&&!data.item.imageBase64;
@@ -1367,7 +1369,8 @@ async function loadReviewMedia_(submissionId,isRetry){
   reviewSource.mediaPending=true;reviewSource.mediaError="";renderLoadedReviewBanner();
   if(isRetry)toast(`Retrying ${mediaIds.length>1?"the source images":"the source image"}…`);
   try{
-    const responses=await Promise.all(mediaIds.map((mediaFileId,index)=>queueJsonp("media",{submissionId,mediaIndex:String(index)}).catch(error=>({ok:false,error:String(error&&error.message||error),mediaFileId}))));
+    const rowNumber=String(reviewSource.rowNumber||"");
+    const responses=await Promise.all(mediaIds.map((mediaFileId,index)=>queueJsonp("media",{submissionId,mediaIndex:String(index),rowNumber}).catch(error=>({ok:false,error:String(error&&error.message||error),mediaFileId}))));
     if(loadId!==reviewMediaLoadId||!reviewSource||String(reviewSource.submissionId)!==String(submissionId))return;
     const images=responses.filter(data=>data.ok&&data.item&&data.item.imageBase64).map(data=>data.item);
     if(!images.length){const failed=responses.find(data=>!data.ok||(data.item&&!data.item.imageBase64));throw new Error((failed&&((failed.item&&failed.item.mediaError)||failed.error))||"No usable source image was returned");}

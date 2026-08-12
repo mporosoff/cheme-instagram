@@ -1027,6 +1027,7 @@ function backfillDiscoveryImages() {
     added++;
   }
 
+  if (added && typeof invalidateReviewQueueCache_ === "function") invalidateReviewQueueCache_();
   var result = { ok: true, checked: checked, added: added, remaining: remaining };
   console.log(JSON.stringify(result));
   return result;
@@ -1081,6 +1082,7 @@ function refreshDiscoveryNewscenterDetails() {
     }
   }
 
+  if ((updated || detached) && typeof invalidateReviewQueueCache_ === "function") invalidateReviewQueueCache_();
   var result = {
     ok: true,
     checked: checked,
