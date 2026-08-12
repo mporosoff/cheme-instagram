@@ -25,8 +25,9 @@ var MAX_CAROUSEL_IMAGES = 10;
 var MAX_CAROUSEL_BYTES = 30 * 1024 * 1024;
 var MAX_REVIEW_LIST_ITEMS = 60;
 var REVIEW_LIST_PREVIEW_CHARS = 700;
-var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v3";
-var REVIEW_QUEUE_CACHE_SECONDS = 45;
+var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v4";
+var REVIEW_QUEUE_CACHE_SECONDS = 300;
+var REVIEW_QUEUE_CACHE_CHUNK_CHARS = 20000;
 var HEADERS = [
   "Timestamp", "Submitter", "Credit", "Type", "Title", "Details",
   "Date", "Time", "Location", "Link", "Caption", "MediaURL",
@@ -70,18 +71,19 @@ function doGet(e) {
         item: getReviewDetail_(
           sanitizeId_(p.submissionId),
           p.markReviewing === "1",
-          p.includeMedia !== "0"
+          p.includeMedia !== "0",
+          p.rowNumber
         )
       }, p.callback);
     }
     if (action === "media") {
       return jsonp_({
         ok: true,
-        item: getReviewMedia_(sanitizeId_(p.submissionId), p.mediaIndex)
+        item: getReviewMedia_(sanitizeId_(p.submissionId), p.mediaIndex, p.rowNumber)
       }, p.callback);
     }
     if (action === "update") {
-      return jsonp_(managerReviewUpdate_(p.submissionId, p.status, p.error), p.callback);
+      return jsonp_(managerReviewUpdate_(p.submissionId, p.status, p.error, p.rowNumber), p.callback);
     }
     return jsonp_({ ok: false, error: "Unknown action." }, p.callback);
   } catch (err) {
@@ -217,16 +219,16 @@ function enforceRateLimit_() {
 
 function handleManagerUpdate_(d) {
   requireManager_(d.managerToken);
-  return json_(managerReviewUpdate_(d.submissionId, d.status, d.error));
+  return json_(managerReviewUpdate_(d.submissionId, d.status, d.error, d.rowNumber));
 }
 
-function managerReviewUpdate_(submissionId, status, errorText) {
+function managerReviewUpdate_(submissionId, status, errorText, rowNumber) {
   var allowed = { New: true, Reviewing: true, Reviewed: true, Rejected: true };
   var nextStatus = String(status || "");
   if (!allowed[nextStatus]) throw new Error("Invalid review status.");
   var id = sanitizeId_(submissionId);
   if (!id) throw new Error("Submission ID is required.");
-  var updated = updateSubmissionStatus_(id, nextStatus, clean_(errorText, 2000));
+  var updated = updateSubmissionStatus_(id, nextStatus, clean_(errorText, 2000), null, rowNumber);
   return { ok: updated, submissionId: id, status: nextStatus };
 }
 
@@ -234,25 +236,36 @@ function listReviewItems_() {
   var cached = readReviewQueueCache_();
   if (cached) return cached;
   var sheet = getSheet_();
-  if (sheet.getLastRow() < 2) return [];
-  // Include ordered media metadata so cards can identify carousel posts.
-  // Image bytes are still fetched only for the submission the reviewer opens.
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  // Find the newest waiting rows using the narrow Status column first. Then
+  // read only the contiguous block containing those rows instead of every
+  // historical publishing row and its potentially large text fields.
+  var statuses = sheet.getRange(2, 15, lastRow - 1, 1).getValues();
+  var waitingRows = [];
+  for (var statusIndex = statuses.length - 1; statusIndex >= 0 && waitingRows.length < MAX_REVIEW_LIST_ITEMS; statusIndex--) {
+    var status = String(statuses[statusIndex][0] || "");
+    if (status === "New" || status === "Reviewing") waitingRows.push(statusIndex + 2);
+  }
+  if (!waitingRows.length) {
+    writeReviewQueueCache_([]);
+    return [];
+  }
+  var newestWaitingRow = waitingRows[0];
+  var oldestWaitingRow = waitingRows[waitingRows.length - 1];
+  var rows = sheet.getRange(oldestWaitingRow, 1, newestWaitingRow - oldestWaitingRow + 1, HEADERS.length).getValues();
   var out = [];
-  for (var i = rows.length - 1; i >= 0 && out.length < MAX_REVIEW_LIST_ITEMS; i--) {
-    var item = rowObject_(rows[i], i + 2);
-    if (item.status === "New" || item.status === "Reviewing") {
-      item.details = truncateText_(item.details, REVIEW_LIST_PREVIEW_CHARS);
-      out.push(item);
-    }
+  for (var waitingIndex = 0; waitingIndex < waitingRows.length; waitingIndex++) {
+    var rowNumber = waitingRows[waitingIndex];
+    out.push(reviewListItem_(rowObject_(rows[rowNumber - oldestWaitingRow], rowNumber)));
   }
   writeReviewQueueCache_(out);
   return out;
 }
 
-function getReviewDetail_(submissionId, markReviewing, includeMedia) {
+function getReviewDetail_(submissionId, markReviewing, includeMedia, rowNumber) {
   var sheet = getSheet_();
-  var item = findSubmission_(submissionId, sheet);
+  var item = findSubmission_(submissionId, sheet, rowNumber);
   if (!item) throw new Error("Submission not found.");
   if (markReviewing && item.status !== "Reviewing") {
     sheet.getRange(item.rowNumber, 15).setValue("Reviewing");
@@ -269,8 +282,8 @@ function getReviewDetail_(submissionId, markReviewing, includeMedia) {
   return item;
 }
 
-function getReviewMedia_(submissionId, mediaIndex) {
-  var item = findSubmission_(submissionId);
+function getReviewMedia_(submissionId, mediaIndex, rowNumber) {
+  var item = findSubmission_(submissionId, null, rowNumber);
   if (!item) throw new Error("Submission not found.");
   return getReviewMediaFromItem_(item, mediaIndex);
 }
@@ -309,9 +322,9 @@ function getReviewMediaFromItem_(item, mediaIndex) {
   return media;
 }
 
-function updateSubmissionStatus_(submissionId, status, errorText, optSheet) {
+function updateSubmissionStatus_(submissionId, status, errorText, optSheet, rowNumber) {
   var sheet = optSheet || getSheet_();
-  var found = findSubmission_(submissionId, sheet);
+  var found = findSubmission_(submissionId, sheet, rowNumber);
   if (!found) return false;
   sheet.getRange(found.rowNumber, 15).setValue(status);
   if (typeof errorText !== "undefined") sheet.getRange(found.rowNumber, 19).setValue(errorText || "");
@@ -321,8 +334,18 @@ function updateSubmissionStatus_(submissionId, status, errorText, optSheet) {
 
 function readReviewQueueCache_() {
   try {
-    var value = CacheService.getScriptCache().get(REVIEW_QUEUE_CACHE_KEY);
-    return value ? JSON.parse(value) : null;
+    var cache = CacheService.getScriptCache();
+    var manifest = JSON.parse(cache.get(REVIEW_QUEUE_CACHE_KEY + ":manifest") || "null");
+    if (!manifest || !manifest.chunks) return null;
+    var keys = [];
+    for (var i = 0; i < manifest.chunks; i++) keys.push(REVIEW_QUEUE_CACHE_KEY + ":part:" + i);
+    var values = cache.getAll(keys);
+    var text = "";
+    for (var j = 0; j < keys.length; j++) {
+      if (typeof values[keys[j]] !== "string") return null;
+      text += values[keys[j]];
+    }
+    return JSON.parse(text);
   } catch (err) {
     return null;
   }
@@ -330,18 +353,41 @@ function readReviewQueueCache_() {
 
 function writeReviewQueueCache_(items) {
   try {
-    CacheService.getScriptCache().put(
-      REVIEW_QUEUE_CACHE_KEY,
-      JSON.stringify(items || []),
-      REVIEW_QUEUE_CACHE_SECONDS
-    );
+    var cache = CacheService.getScriptCache();
+    var manifestKey = REVIEW_QUEUE_CACHE_KEY + ":manifest";
+    var previous = JSON.parse(cache.get(manifestKey) || "null");
+    var text = JSON.stringify(items || []);
+    var values = {};
+    var chunkCount = Math.max(1, Math.ceil(text.length / REVIEW_QUEUE_CACHE_CHUNK_CHARS));
+    for (var i = 0; i < chunkCount; i++) {
+      values[REVIEW_QUEUE_CACHE_KEY + ":part:" + i] = text.slice(
+        i * REVIEW_QUEUE_CACHE_CHUNK_CHARS,
+        (i + 1) * REVIEW_QUEUE_CACHE_CHUNK_CHARS
+      );
+    }
+    cache.putAll(values, REVIEW_QUEUE_CACHE_SECONDS);
+    cache.put(manifestKey, JSON.stringify({ chunks: chunkCount }), REVIEW_QUEUE_CACHE_SECONDS);
+    if (previous && previous.chunks > chunkCount) {
+      var staleKeys = [];
+      for (var staleIndex = chunkCount; staleIndex < previous.chunks; staleIndex++) {
+        staleKeys.push(REVIEW_QUEUE_CACHE_KEY + ":part:" + staleIndex);
+      }
+      if (staleKeys.length) cache.removeAll(staleKeys);
+    }
   } catch (err) {
     // Cache is an optimization; the Sheet remains authoritative.
   }
 }
 
 function invalidateReviewQueueCache_() {
-  try { CacheService.getScriptCache().remove(REVIEW_QUEUE_CACHE_KEY); }
+  try {
+    var cache = CacheService.getScriptCache();
+    var manifestKey = REVIEW_QUEUE_CACHE_KEY + ":manifest";
+    var manifest = JSON.parse(cache.get(manifestKey) || "null");
+    var keys = [manifestKey];
+    for (var i = 0; manifest && i < manifest.chunks; i++) keys.push(REVIEW_QUEUE_CACHE_KEY + ":part:" + i);
+    cache.removeAll(keys);
+  }
   catch (err) {}
 }
 
@@ -375,15 +421,44 @@ function truncateText_(value, max) {
   return limit > 0 && text.length > limit ? text.slice(0, limit - 1).trim() + "…" : text;
 }
 
-function findSubmission_(submissionId, optSheet) {
+function reviewListItem_(item) {
+  return {
+    rowNumber: item.rowNumber,
+    timestamp: item.timestamp,
+    submitter: truncateText_(item.submitter, 150),
+    credit: truncateText_(item.credit, 250),
+    type: item.type,
+    title: truncateText_(item.title, 300),
+    details: truncateText_(item.details, REVIEW_LIST_PREVIEW_CHARS),
+    date: item.date,
+    time: item.time,
+    location: truncateText_(item.location, 300),
+    link: truncateText_(item.link, 1000),
+    status: item.status,
+    submissionId: item.submissionId,
+    mediaFileId: item.mediaFileId,
+    mediaFileIds: item.mediaFileIds,
+    mediaCount: item.mediaCount
+  };
+}
+
+function findSubmission_(submissionId, optSheet, rowNumber) {
   if (!submissionId) return null;
   var sheet = optSheet || getSheet_();
-  if (sheet.getLastRow() < 2) return null;
-  var ids = sheet.getRange(2, 16, sheet.getLastRow() - 1, 1).getValues();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var hintedRow = Math.floor(Number(rowNumber) || 0);
+  if (hintedRow >= 2 && hintedRow <= lastRow) {
+    var hintedValues = sheet.getRange(hintedRow, 1, 1, HEADERS.length).getValues()[0];
+    if (String(hintedValues[15] || "") === submissionId) {
+      return rowObject_(hintedValues, hintedRow);
+    }
+  }
+  var ids = sheet.getRange(2, 16, lastRow - 1, 1).getValues();
   for (var i = ids.length - 1; i >= 0; i--) {
     if (String(ids[i][0]) === submissionId) {
-      var rowNumber = i + 2;
-      return rowObject_(sheet.getRange(rowNumber, 1, 1, HEADERS.length).getValues()[0], rowNumber);
+      var foundRow = i + 2;
+      return rowObject_(sheet.getRange(foundRow, 1, 1, HEADERS.length).getValues()[0], foundRow);
     }
   }
   return null;

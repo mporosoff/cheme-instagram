@@ -14,6 +14,8 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 
 Photo posts can contain up to 10 ordered images. The public form and Content Studio both accept multi-image uploads, review submissions retain the complete carousel, and approval stores every rendered slide for publishing.
 
+The private review queue keeps a compact five-minute cache and uses validated Sheet row hints when loading details or source media, so opening the department review list and importing a submission do not repeatedly rescan the complete Sheet.
+
 Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor. The **Plain photo + per-image text** template preserves each full image in a 4:5 frame and adds an independently editable text overlay to each slide, including controls for font, fill color, outline thickness/color, nine-position placement, and an optional text background with its own color and transparency. The traditional Instagram caption remains separate.
 
 The graphic editor defaults to the University-aligned **Rochester Navy** preset and offers **Cobalt Chevron**, **Ever Better Light**, and the preserved original **Studio Classic** style. Each preset works across paper, event, quote, photo, and Reel layouts; choose a different radio-card variation after generation without regenerating the caption.
