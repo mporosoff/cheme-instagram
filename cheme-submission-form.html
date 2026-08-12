@@ -28,7 +28,7 @@
   h1{font-family:"Space Grotesk",sans-serif;font-size:23px;margin:0;letter-spacing:-.01em;}
   .sub{color:var(--slate);font-size:14px;margin:2px 0 22px;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px;}
-  label.fld{display:block;margin-bottom:16px;}
+  .fld{display:block;margin-bottom:16px;}
   .lab{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
   .lab .req{color:var(--glow);}
   .lab .hint{font-weight:400;color:var(--slate);}
@@ -39,7 +39,7 @@
   .type{padding:11px 6px;border:1px solid var(--line);border-radius:9px;background:var(--paper);font-size:13px;font-weight:500;color:var(--ink-soft);cursor:pointer;text-align:center;transition:.12s;}
   .type:hover{border-color:var(--line-strong);}
   .type.on{background:var(--glow-bg);border-color:var(--glow);color:#8A2B0C;}
-  .drop{border:1.5px dashed var(--line-strong);border-radius:10px;padding:20px;text-align:center;color:var(--slate);font-size:14px;cursor:pointer;background:var(--paper);transition:.12s;}
+  .drop{display:block;width:100%;border:1.5px dashed var(--line-strong);border-radius:10px;padding:20px;text-align:center;color:var(--slate);font:inherit;font-size:14px;cursor:pointer;background:var(--paper);transition:.12s;}
   .drop:hover{border-color:var(--glow);color:var(--glow);}
   .preview{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
   .preview-item{position:relative;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--paper);}
@@ -92,11 +92,12 @@
 
     <label class="fld"><span class="lab">Details</span><textarea id="details" placeholder="Anything that helps us write a good caption — what's the finding, who's involved, why it matters..."></textarea></label>
 
-    <label class="fld"><span class="lab">Photos <span class="hint">(optional — add up to 10 in carousel order)</span></span>
-      <div class="drop" id="drop">Tap to add one or more photos</div>
-      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" multiple class="hide">
+    <div class="fld"><span class="lab">Photos <span class="hint">(required for Photo / carousel; add up to 10 in order)</span></span>
+      <button type="button" class="drop" id="drop" aria-describedby="photoErr">Tap to add one or more photos</button>
+      <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="hide">
       <div class="preview" id="preview" aria-live="polite"></div>
-    </label>
+      <div id="photoErr" aria-live="assertive"></div>
+    </div>
 
     <label class="fld"><span class="lab">Reel or large video? <span class="hint">paste a Google Drive MP4 or MOV link; under 60 MB; set to "anyone with the link"</span></span><input type="text" id="videoLink" placeholder="https://drive.google.com/file/d/..."></label>
 
@@ -149,17 +150,18 @@ drop.ondrop=e=>{e.preventDefault();drop.style.borderColor="";addImages(e.dataTra
 file.onchange=e=>{addImages(e.target.files);file.value="";};
 async function addImages(fileList){
   const files=Array.from(fileList||[]);if(!files.length)return;
-  if(selectedImages.length+files.length>MAX_IMAGES){showErr(`A carousel can contain up to ${MAX_IMAGES} photos.`);return;}
-  if(files.some(f=>!/^image\/(jpeg|png|webp)$/.test(f.type))){showErr("Please use JPEG, PNG, or WebP images.");return;}
-  if(files.some(f=>f.size>8*1024*1024)){showErr("Each image must be 8 MB or smaller.");return;}
+  if(selectedImages.length+files.length>MAX_IMAGES){showPhotoErr(`A carousel can contain up to ${MAX_IMAGES} photos.`);return;}
+  if(files.some(f=>!isSupportedImage(f))){showPhotoErr("Those photos were not added. Use JPEG, PNG, or WebP files; HEIC/HEIF photos must be exported or shared as JPEG first.");return;}
+  if(files.some(f=>f.size>8*1024*1024)){showPhotoErr("Those photos were not added. Each image must be 8 MB or smaller.");return;}
   const totalBytes=selectedImages.reduce((sum,image)=>sum+image.size,0)+files.reduce((sum,f)=>sum+f.size,0);
-  if(totalBytes>MAX_TOTAL_IMAGE_BYTES){showErr("Please keep the carousel under 30 MB total.");return;}
+  if(totalBytes>MAX_TOTAL_IMAGE_BYTES){showPhotoErr("Those photos were not added. Please keep the carousel under 30 MB total.");return;}
   try{
     const added=await Promise.all(files.map(readImageFile));
     selectedImages=selectedImages.concat(added);renderImagePreviews();
-    document.getElementById("formErr").innerHTML="";
-  }catch(e){showErr("One of those images could not be read. Please try again.");}
+    document.getElementById("photoErr").innerHTML="";document.getElementById("formErr").innerHTML="";
+  }catch(e){showPhotoErr("Those photos could not be read. Try exporting them as JPEG files, then add them again.");}
 }
+function isSupportedImage(f){return /^image\/(jpeg|png|webp)$/i.test(String(f&&f.type||""))||/\.(jpe?g|png|webp)$/i.test(String(f&&f.name||""));}
 function readImageFile(f){
   return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve({imageBase64:r.result.split(",")[1],imageType:f.type,imageName:f.name,size:f.size,dataUrl:r.result});r.onerror=reject;r.readAsDataURL(f);});
 }
@@ -180,11 +182,13 @@ function extractDriveFileId(input){
   return query?query[1]:"";
 }
 function showErr(m){document.getElementById("formErr").innerHTML=`<div class="err">${m}</div>`;}
+function showPhotoErr(m){document.getElementById("photoErr").innerHTML=`<div class="err">${m}</div>`;drop.focus();}
 
 document.getElementById("submitBtn").onclick=async function(){
   document.getElementById("formErr").innerHTML="";
   if(!val("submitter")) return showErr("Please add your name.");
   if(!val("title")) return showErr("Please add a title or short description.");
+  if(activeType==="Photo"&&!selectedImages.length) return showPhotoErr("Add at least one JPEG, PNG, or WebP image and wait for its thumbnail to appear before sending.");
   if(!document.getElementById("consent").checked) return showErr("Please confirm you're OK with this being posted.");
   if(WEBAPP_URL.indexOf("PASTE_")===0) return showErr("This form isn't connected yet — the account manager needs to add the submission link (see SETUP.md).");
   const videoFileId=extractDriveFileId(val("videoLink"));
