@@ -40,8 +40,18 @@ assert.match(studioSource, /id="gOverlayOutlineColor"/,
   "plain overlays should provide an outline color selector");
 assert.match(studioSource, /id="gOverlayPosition"[\s\S]*bottom-right/,
   "plain overlays should provide nine-position placement options");
+assert.match(studioSource, /id="gOverlayBackground"/,
+  "plain overlays should let each slide toggle its text background");
+assert.match(studioSource, /id="gOverlayBackgroundColor"[^>]*type="color"|type="color"[^>]*id="gOverlayBackgroundColor"/,
+  "plain overlays should provide a background color selector");
+assert.match(studioSource, /id="gOverlayBackgroundOpacity"[^>]*type="range"|type="range"[^>]*id="gOverlayBackgroundOpacity"/,
+  "plain overlays should provide a background transparency control");
 assert.match(studioSource, /ctx\.strokeText\(line,x,cursorY\)/,
   "the canvas renderer should draw the selected font outline");
+assert.match(studioSource, /styled\.overlayBackground!=="off"&&backgroundOpacity>0/,
+  "the canvas renderer should honor the per-slide background toggle");
+assert.match(studioSource, /hexRgba\(styled\.overlayBackgroundColor,backgroundOpacity\)/,
+  "the canvas renderer should use the selected background color and transparency");
 assert.match(studioSource, /drawPlainPhoto\(ctx,fig,slide,W,H/,
   "plain rendering should use the selected slide's full overlay style");
 assert.match(studioSource, /async function renderedApprovalImages_\(\)/,
