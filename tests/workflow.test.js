@@ -23,7 +23,7 @@ vm.runInThisContext(fs.readFileSync(path.join(root, "Code.gs"), "utf8"), {
 });
 
 function reviewRow(status, title, details) {
-  const row = new Array(20).fill("");
+  const row = new Array(24).fill("");
   row[0] = new Date("2026-08-05T12:00:00Z");
   row[1] = "Discovery Bot";
   row[3] = "Shout-out";
@@ -31,6 +31,8 @@ function reviewRow(status, title, details) {
   row[5] = details;
   row[9] = "https://example.edu/story";
   row[12] = "media-file-id";
+  row[20] = JSON.stringify(["media-file-id"]);
+  row[21] = JSON.stringify(["https://example.edu/media.jpg"]);
   row[14] = status;
   row[15] = "submission-" + title.toLowerCase().replace(/\s+/g, "-");
   return row;
@@ -55,7 +57,7 @@ global.getSheet_ = function() {
 
 const firstList = listReviewItems_();
 assert.equal(firstList.length, 2);
-assert.equal(requestedWidth, 16, "queue previews should read only columns A:P");
+assert.equal(requestedWidth, 24, "queue previews should include ordered carousel metadata through column X");
 assert.ok(firstList[1].details.length <= REVIEW_LIST_PREVIEW_CHARS,
   "queue-card details should be truncated before transfer");
 assert.equal(listReads, 1);
@@ -113,6 +115,7 @@ const media = getReviewMedia_("submission-first");
 assert.equal(bytesReads, 1, "the separate media request should read image bytes once");
 assert.equal(media.submissionId, "submission-first");
 assert.equal(media.imageBase64, "AQIDBA==");
+assert.equal(media.mediaCount, 1);
 
 const legacyDetail = getReviewDetail_("submission-first", false);
 assert.equal(legacyDetail.imageBase64, "AQIDBA==",
@@ -121,8 +124,8 @@ assert.equal(legacyDetail.imageBase64, "AQIDBA==",
 const studioSource = fs.readFileSync(path.join(root, "ig-content-studio.html"), "utf8");
 assert.match(studioSource, /queueJsonp\("detail",\{submissionId,markReviewing:"1",includeMedia:"0"\}\)/,
   "Studio load should request metadata without blocking on image transfer");
-assert.match(studioSource, /queueJsonp\("media",\{submissionId\}\)/,
-  "source media should load independently after the Studio is populated");
+assert.match(studioSource, /queueJsonp\("media",\{submissionId,mediaIndex:String\(index\)\}\)/,
+  "each carousel image should load independently after the Studio is populated");
 assert.match(studioSource, /if\(reviewQueueListPromise\)return reviewQueueListPromise/,
   "reopening the queue must reuse an in-flight list request");
 assert.match(studioSource, /refreshReviewQueue\(!!reviewQueueItemsCache\)/,
@@ -141,7 +144,7 @@ assert.match(studioSource, /setField\("rpLink",item\.link\)/,
   "loading a discovered shout-out should retain its original source link");
 assert.match(studioSource, /link:sourceLink/,
   "approved Studio payloads should save the retained source link in the publishing queue");
-assert.match(studioSource, /sourceLink,date:new Date\(\)\.toISOString\(\)/,
+assert.match(studioSource, /sourceLink,slideCount,date:new Date\(\)\.toISOString\(\)/,
   "local approval history should retain the source link for reference");
 
 console.log("Workflow tests passed");

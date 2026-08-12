@@ -889,7 +889,8 @@ function saveDiscoveryCandidates_(candidates) {
       new Date(), "Discovery Bot", truncate_(candidate.credit, 250), candidate.type,
       truncate_(candidate.title, 500), truncate_(details, 6000),
       formatDisplayDate_(candidate.date), "", "", truncate_(candidate.link, 1000),
-      "", image ? image.driveUrl : "", image ? image.fileId : "", "", "New", Utilities.getUuid(), "", "", "", ""
+      "", image ? image.driveUrl : "", image ? image.fileId : "", "", "New", Utilities.getUuid(), "", "", "", "",
+      image ? JSON.stringify([image.fileId]) : "", image ? JSON.stringify([image.driveUrl]) : "", "", image ? 1 : 0
     ]);
     added.push(candidate);
   }

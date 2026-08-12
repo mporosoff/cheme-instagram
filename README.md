@@ -12,7 +12,9 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 | `Discovery.gs` | Optional faculty-news/publication discovery that adds verified-by-you leads to the review queue. | Behind the scenes |
 | `SETUP.md` | The full, do-this-then-that setup guide (≈1 hour, mostly one-time). | You |
 
-Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor.
+Photo posts can contain up to 10 ordered images. The public form and Content Studio both accept multi-image uploads, review submissions retain the complete carousel, and approval stores every rendered slide for publishing.
+
+Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor. The **Plain photo + per-image text** template preserves each full image in a 4:5 frame and adds only an optional, independently editable text overlay to each slide. The traditional Instagram caption remains separate.
 
 The graphic editor defaults to the University-aligned **Rochester Navy** preset and offers **Cobalt Chevron**, **Ever Better Light**, and the preserved original **Studio Classic** style. Each preset works across paper, event, quote, photo, and Reel layouts; choose a different radio-card variation after generation without regenerating the caption.
 
