@@ -132,6 +132,9 @@
   .slide-choice.on{border-color:var(--glow);box-shadow:0 0 0 2px rgba(214,83,31,.12);}
   .slide-choice img{width:100%;height:100%;object-fit:cover;display:block;}
   .slide-choice span{position:absolute;left:3px;bottom:3px;min-width:18px;height:18px;padding:1px 4px;border-radius:9px;background:rgba(0,0,0,.72);color:#fff;font:600 10px "IBM Plex Mono",monospace;}
+  .overlay-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:11px;}
+  .overlay-controls .full{grid-column:1 / -1;}
+  .overlay-controls label.fld{margin:0;}
 
   /* queue */
   .queue-wrap{max-width:1240px;margin:0 auto 40px;padding:0 22px;}
@@ -176,6 +179,7 @@
     .out-acts .btn{flex:1;justify-content:center;}
     #cardDisp{max-width:100% !important;}
   }
+  @media (max-width:520px){.overlay-controls{grid-template-columns:1fr;}.overlay-controls .full{grid-column:auto;}}
   @media (prefers-reduced-motion:reduce){ .glowbar.on::before{animation:none;width:100%;opacity:.5;} *{transition:none !important;} }
 </style>
 </head>
@@ -303,6 +307,8 @@ const TYPES=[
 ];
 let activeType="paper", photos=[], figure=null, paperMeta=null, reelCover=null, reelVideoLink="", reviewSource=null;
 const MAX_CAROUSEL_IMAGES=10, MAX_CAROUSEL_BYTES=30*1024*1024;
+const PLAIN_OVERLAY_DEFAULTS={overlayFont:"inter",overlayColor:"#FFFFFF",overlayOutline:"medium",overlayOutlineColor:"#000000",overlayPosition:"bottom-center"};
+const PLAIN_OVERLAY_FONTS={inter:"'Inter'",space:"'Space Grotesk'",serif:"Georgia",mono:"'IBM Plex Mono'"};
 let reviewQueueItemsCache=null, reviewQueueListPromise=null, reviewQueueGeneration=0, reviewMediaLoadId=0;
 
 function renderTypes(){
@@ -441,11 +447,12 @@ async function handlePhoto(list){
   try{photos=photos.concat(await Promise.all(files.map(readPhotoFile_)));syncCurrentSlides_();renderThumbs();const drop=document.getElementById("drop");if(drop)drop.innerHTML=`${photos.length} photo${photos.length===1?"":"s"} ready — <b>click or drop to add more</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`;}
   catch(e){toast("One of those images could not be read");}
 }
-function readPhotoFile_(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({dataUrl:reader.result,name:file.name,mediaType:file.type,size:file.size,overlayCaption:""});reader.onerror=reject;reader.readAsDataURL(file);});}
+function withPlainOverlayDefaults_(slide){return{...PLAIN_OVERLAY_DEFAULTS,...(slide||{})};}
+function readPhotoFile_(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(withPlainOverlayDefaults_({dataUrl:reader.result,name:file.name,mediaType:file.type,size:file.size,overlayCaption:""}));reader.onerror=reject;reader.readAsDataURL(file);});}
 function syncCurrentSlides_(){
   if(!currentGraphic)return;
   const previous=currentSlides||[];
-  currentSlides=photos.map(photo=>{const prior=previous.find(slide=>slide.dataUrl===photo.dataUrl);return{...photo,overlayCaption:(prior&&prior.overlayCaption)||photo.overlayCaption||""};});
+  currentSlides=photos.map(photo=>{const prior=previous.find(slide=>slide.dataUrl===photo.dataUrl);return withPlainOverlayDefaults_({...photo,...(prior||{})});});
   activeSlideIndex=Math.min(activeSlideIndex,Math.max(0,currentSlides.length-1));
   currentGraphic.figure=currentSlides[activeSlideIndex]?currentSlides[activeSlideIndex].dataUrl:null;
   if(document.getElementById("cardDisp"))renderGraphicTab();
@@ -608,7 +615,7 @@ function initOutput(p,built){
   const fallbackHeadline=built.headlineHint||(reviewSource&&reviewSource.title)||"";
   const graphicHeadline=p.headline||fallbackHeadline;
   activeSlideIndex=0;
-  currentSlides=activeType==="photo"?photos.map((photo,index)=>({...photo,overlayCaption:photo.overlayCaption||((reviewSource&&reviewSource.overlayCaptions||[])[index])||""})):[];
+  currentSlides=activeType==="photo"?photos.map((photo,index)=>withPlainOverlayDefaults_({...photo,overlayCaption:photo.overlayCaption||((reviewSource&&reviewSource.overlayCaptions||[])[index])||""})):[];
   currentGraphic={
     template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
     theme:s.theme, accent:s.accent, stylePreset:s.stylePreset||"rochester", logo:s.logo||"",
@@ -723,11 +730,20 @@ function renderGraphicTab(){
         </select>
         <span class="hint">“Show entire image” preserves every edge; unused space is filled with a softened copy instead of blank bands.</span>
       </label>`:"";
+  const activeSlide=currentSlides[activeSlideIndex]||withPlainOverlayDefaults_();
   const slideControl=current.type==="photo"&&currentSlides.length?`
       <div class="slide-editor">
         <div class="slide-editor-head"><span class="lab" style="margin:0">Image ${activeSlideIndex+1} of ${currentSlides.length}${hasCarousel?" · carousel order":""}</span><div><button class="btn ghost sm" id="prevSlide"${activeSlideIndex===0?" disabled":""}>←</button><button class="btn ghost sm" id="nextSlide"${activeSlideIndex===currentSlides.length-1?" disabled":""}>→</button></div></div>
         <div class="slide-strip">${currentSlides.map((slide,index)=>`<button type="button" class="slide-choice${index===activeSlideIndex?" on":""}" data-slide="${index}" aria-label="Edit image ${index+1}"><img src="${slide.dataUrl}" alt=""><span>${index+1}</span></button>`).join("")}</div>
-        ${isPlain?`<label class="fld" style="margin:4px 0 0"><span class="lab">Text layered on image ${activeSlideIndex+1} <span class="hint">(optional; unique to this image)</span></span><textarea id="gSlideCaption" maxlength="500" placeholder="Leave blank to keep this image unchanged">${esc(currentSlides[activeSlideIndex].overlayCaption||"")}</textarea></label><span class="hint">This text appears only on the image. The traditional Instagram caption stays separate in the Caption tab.</span>`:`<span class="hint">Preview each image. The selected template is applied to every slide.</span>`}
+        ${isPlain?`<label class="fld" style="margin:4px 0 0"><span class="lab">Text layered on image ${activeSlideIndex+1} <span class="hint">(optional; unique to this image)</span></span><textarea id="gSlideCaption" maxlength="500" placeholder="Leave blank to keep this image unchanged">${esc(activeSlide.overlayCaption||"")}</textarea></label>
+          <div class="overlay-controls">
+            <label class="fld"><span class="lab">Font</span><select id="gOverlayFont"><option value="inter"${activeSlide.overlayFont==="inter"?" selected":""}>Inter · clean sans</option><option value="space"${activeSlide.overlayFont==="space"?" selected":""}>Space Grotesk · display</option><option value="serif"${activeSlide.overlayFont==="serif"?" selected":""}>Georgia · serif</option><option value="mono"${activeSlide.overlayFont==="mono"?" selected":""}>IBM Plex Mono</option></select></label>
+            <label class="fld"><span class="lab">Text color</span><input type="color" id="gOverlayColor" value="${esc(activeSlide.overlayColor)}"></label>
+            <label class="fld"><span class="lab">Font outline</span><select id="gOverlayOutline"><option value="none"${activeSlide.overlayOutline==="none"?" selected":""}>None</option><option value="thin"${activeSlide.overlayOutline==="thin"?" selected":""}>Thin</option><option value="medium"${activeSlide.overlayOutline==="medium"?" selected":""}>Medium</option><option value="thick"${activeSlide.overlayOutline==="thick"?" selected":""}>Thick</option></select></label>
+            <label class="fld"><span class="lab">Outline color</span><input type="color" id="gOverlayOutlineColor" value="${esc(activeSlide.overlayOutlineColor)}"${activeSlide.overlayOutline==="none"?" disabled":""}></label>
+            <label class="fld full"><span class="lab">Position</span><select id="gOverlayPosition"><option value="top-left"${activeSlide.overlayPosition==="top-left"?" selected":""}>Top left</option><option value="top-center"${activeSlide.overlayPosition==="top-center"?" selected":""}>Top center</option><option value="top-right"${activeSlide.overlayPosition==="top-right"?" selected":""}>Top right</option><option value="middle-left"${activeSlide.overlayPosition==="middle-left"?" selected":""}>Middle left</option><option value="middle-center"${activeSlide.overlayPosition==="middle-center"?" selected":""}>Middle center</option><option value="middle-right"${activeSlide.overlayPosition==="middle-right"?" selected":""}>Middle right</option><option value="bottom-left"${activeSlide.overlayPosition==="bottom-left"?" selected":""}>Bottom left</option><option value="bottom-center"${activeSlide.overlayPosition==="bottom-center"?" selected":""}>Bottom center</option><option value="bottom-right"${activeSlide.overlayPosition==="bottom-right"?" selected":""}>Bottom right</option></select></label>
+          </div>
+          <span class="hint">These choices apply only to image ${activeSlideIndex+1} and are baked into its JPEG. The traditional Instagram caption stays separate.</span>`:`<span class="hint">Preview each image. The selected template is applied to every slide.</span>`}
       </div>`:"";
   const headlineControl=isPlain?"":`<label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>`;
   a.innerHTML=`
@@ -766,6 +782,17 @@ function renderGraphicTab(){
   if(prev)prev.onclick=()=>{if(activeSlideIndex>0){activeSlideIndex--;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();}};
   if(next)next.onclick=()=>{if(activeSlideIndex<currentSlides.length-1){activeSlideIndex++;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();}};
   const slideCaption=document.getElementById("gSlideCaption");if(slideCaption)slideCaption.oninput=()=>{currentSlides[activeSlideIndex].overlayCaption=slideCaption.value;drawCard("cardDisp");};
+  const updateOverlayStyle=()=>{
+    const slide=currentSlides[activeSlideIndex];if(!slide)return;
+    slide.overlayFont=v("gOverlayFont")||PLAIN_OVERLAY_DEFAULTS.overlayFont;
+    slide.overlayColor=v("gOverlayColor")||PLAIN_OVERLAY_DEFAULTS.overlayColor;
+    slide.overlayOutline=v("gOverlayOutline")||PLAIN_OVERLAY_DEFAULTS.overlayOutline;
+    slide.overlayOutlineColor=v("gOverlayOutlineColor")||PLAIN_OVERLAY_DEFAULTS.overlayOutlineColor;
+    slide.overlayPosition=v("gOverlayPosition")||PLAIN_OVERLAY_DEFAULTS.overlayPosition;
+    const outlineColor=document.getElementById("gOverlayOutlineColor");if(outlineColor)outlineColor.disabled=slide.overlayOutline==="none";
+    drawCard("cardDisp");
+  };
+  ["gOverlayFont","gOverlayColor","gOverlayOutline","gOverlayOutlineColor","gOverlayPosition"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=updateOverlayStyle;el.onchange=updateOverlayStyle;}});
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   const downloadAll=document.getElementById("dlAllGraphics");if(downloadAll)downloadAll.onclick=downloadAllGraphics;
   document.getElementById("approveBtn").onclick=approve;
@@ -790,19 +817,34 @@ function photoImageDraw(ctx,img,W,H,fit){
   ctx.save();ctx.filter="blur(32px) brightness(.62) saturate(.88)";coverDraw(ctx,img,-40,-40,W+80,H+80);ctx.restore();
   containDraw(ctx,img,0,0,W,H,0);
 }
-function drawPlainPhoto(ctx,img,caption,W,H,fit){
+function plainOutlineWidth_(value){return{none:0,thin:2,medium:5,thick:9}[value]??5;}
+function drawPlainPhoto(ctx,img,slide,W,H,fit){
   ctx.clearRect(0,0,W,H);
   if(img)photoImageDraw(ctx,img,W,H,fit||"contain");else{ctx.fillStyle="#1C1B19";ctx.fillRect(0,0,W,H);}
-  const text=String(caption||"").trim();if(!text)return;
-  const P=72;
-  const fitted=fitLines(ctx,text,{maxW:W-P*2,maxH:260,weight:"700",family:"'Inter'",max:52,min:30,lh:1.18});
+  const styled=withPlainOverlayDefaults_(slide),text=String(styled.overlayCaption||"").trim();if(!text)return;
+  const P=72,family=PLAIN_OVERLAY_FONTS[styled.overlayFont]||PLAIN_OVERLAY_FONTS.inter;
+  const fitted=fitLines(ctx,text,{maxW:W-P*2,maxH:280,weight:"700",family,max:54,min:29,lh:1.18});
   const lines=fitted.lines.slice(0,4);
-  if(fitted.lines.length>4)lines[3]=clip(ctx,lines[3]+"…",W-P*2,`700 ${fitted.size}px 'Inter'`);
-  const lineHeight=fitted.size*1.18,boxHeight=lines.length*lineHeight+68,boxY=H-110-boxHeight;
-  const grad=ctx.createLinearGradient(0,boxY-150,0,H);grad.addColorStop(0,"rgba(0,0,0,0)");grad.addColorStop(1,"rgba(0,0,0,.76)");ctx.fillStyle=grad;ctx.fillRect(0,boxY-150,W,H-boxY+150);
-  ctx.fillStyle="rgba(0,0,0,.62)";ctx.fillRect(0,boxY,W,boxHeight);
-  ctx.font=`700 ${fitted.size}px 'Inter'`;ctx.fillStyle="#FFFFFF";ctx.textBaseline="top";
-  let y=boxY+34;lines.forEach(line=>{ctx.fillText(line,P,y);y+=lineHeight;});
+  const font=`700 ${fitted.size}px ${family}`;
+  if(fitted.lines.length>4)lines[3]=clip(ctx,lines[3]+"…",W-P*2,font);
+  ctx.font=font;
+  const lineHeight=fitted.size*1.18,textHeight=lines.length*lineHeight;
+  const position=String(styled.overlayPosition||"bottom-center").split("-");
+  const vertical=position[0],horizontal=position[1]||"center";
+  const x=horizontal==="left"?P:(horizontal==="right"?W-P:W/2);
+  const y=vertical==="top"?92:(vertical==="middle"?(H-textHeight)/2:H-112-textHeight);
+  const widths=lines.map(line=>ctx.measureText(line).width),panelWidth=Math.min(W-48,Math.max(...widths)+76),panelHeight=textHeight+54;
+  const panelX=horizontal==="left"?P-28:(horizontal==="right"?W-P-panelWidth+28:(W-panelWidth)/2);
+  const panelY=y-27;
+  ctx.fillStyle="rgba(0,0,0,.34)";roundRect(ctx,panelX,panelY,panelWidth,panelHeight,22);ctx.fill();
+  ctx.font=font;ctx.textAlign=horizontal;ctx.textBaseline="top";ctx.lineJoin="round";
+  const outlineWidth=plainOutlineWidth_(styled.overlayOutline);
+  let cursorY=y;
+  lines.forEach(line=>{
+    if(outlineWidth){ctx.strokeStyle=styled.overlayOutlineColor||"#000000";ctx.lineWidth=outlineWidth;ctx.strokeText(line,x,cursorY);}
+    ctx.fillStyle=styled.overlayColor||"#FFFFFF";ctx.fillText(line,x,cursorY);cursorY+=lineHeight;
+  });
+  ctx.textAlign="left";
 }
 function hexRgba(hex,alpha){const h=String(hex||"#000000").replace("#",""),n=parseInt(h.length===3?h.split("").map(c=>c+c).join(""):h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;}
 function angularPanel(ctx,x,y,w,h,cut,fill){
@@ -976,7 +1018,7 @@ async function drawCard(canvasId,slideIndex){
   const figureSource=slide&&slide.dataUrl?slide.dataUrl:g.figure;
   const fig = figureSource ? await loadImg(figureSource) : null;
   if(g.template==="plain"){
-    drawPlainPhoto(ctx,fig,slide&&slide.overlayCaption,W,H,g.imageFit||"contain");
+    drawPlainPhoto(ctx,fig,slide,W,H,g.imageFit||"contain");
     return paint(canvasId);
   }
   const branded=brandStyle(g);
@@ -1331,7 +1373,7 @@ function applyReviewMedia_(item){
   const first=sourceImages[0];reviewSource.images=sourceImages;reviewSource.imageBase64=first.imageBase64;reviewSource.imageType=first.imageType||"image/jpeg";reviewSource.imageName=first.imageName||"submission.jpg";reviewSource.mediaPending=false;reviewSource.mediaError="";
   const dataUrl=first.dataUrl;
   if(activeType==="photo"){
-    photos=sourceImages.map(image=>({dataUrl:image.dataUrl,name:image.imageName||"submission.jpg",mediaType:image.imageType||"image/jpeg",overlayCaption:image.overlayCaption||"",size:0}));syncCurrentSlides_();renderThumbs();
+    photos=sourceImages.map(image=>withPlainOverlayDefaults_({dataUrl:image.dataUrl,name:image.imageName||"submission.jpg",mediaType:image.imageType||"image/jpeg",overlayCaption:image.overlayCaption||"",size:0}));syncCurrentSlides_();renderThumbs();
     const drop=document.getElementById("drop");if(drop)drop.innerHTML=`${photos.length} source image${photos.length===1?"":"s"} loaded ✓ — <b>click or drop to add more</b><br><span style="font-size:12px">Verify credit and reuse rights before approval</span>`;
   }else if(activeType==="reel"){
     reelCover=dataUrl;renderReelThumb();
@@ -1348,7 +1390,7 @@ function applyReviewSubmission(item){
   activeType=map[item.type]||"photo";
   const dataUrl=item.imageBase64?`data:${item.imageType||"image/jpeg"};base64,${item.imageBase64}`:"";
   if(dataUrl){
-    if(activeType==="photo")photos=[{dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg",overlayCaption:(item.overlayCaptions||[])[0]||"",size:0}];
+    if(activeType==="photo")photos=[withPlainOverlayDefaults_({dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg",overlayCaption:(item.overlayCaptions||[])[0]||"",size:0})];
     else if(activeType==="reel")reelCover=dataUrl;
     else figure={dataUrl,name:item.imageName||"submission.jpg",mediaType:item.imageType||"image/jpeg"};
   }
