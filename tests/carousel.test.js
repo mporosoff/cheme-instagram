@@ -24,6 +24,20 @@ assert.match(studioSource, /Plain photo \+ per-image text/,
   "the Content Studio should expose the plain per-image caption template");
 assert.match(studioSource, /currentSlides\[activeSlideIndex\]\.overlayCaption=slideCaption\.value/,
   "each slide should keep its own overlay caption");
+assert.match(studioSource, /id="gOverlayFont"/,
+  "plain overlays should provide a per-slide font selector");
+assert.match(studioSource, /id="gOverlayColor"[^>]*type="color"|type="color"[^>]*id="gOverlayColor"/,
+  "plain overlays should provide a per-slide text color selector");
+assert.match(studioSource, /id="gOverlayOutline"/,
+  "plain overlays should provide outline thickness options");
+assert.match(studioSource, /id="gOverlayOutlineColor"/,
+  "plain overlays should provide an outline color selector");
+assert.match(studioSource, /id="gOverlayPosition"[\s\S]*bottom-right/,
+  "plain overlays should provide nine-position placement options");
+assert.match(studioSource, /ctx\.strokeText\(line,x,cursorY\)/,
+  "the canvas renderer should draw the selected font outline");
+assert.match(studioSource, /drawPlainPhoto\(ctx,fig,slide,W,H/,
+  "plain rendering should use the selected slide's full overlay style");
 assert.match(studioSource, /async function renderedApprovalImages_\(\)/,
   "approval should render every carousel slide");
 assert.match(studioSource, /images,imageBase64:/,
