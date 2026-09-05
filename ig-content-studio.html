@@ -138,6 +138,24 @@
   .overlay-opacity{display:flex;align-items:center;gap:10px;min-height:38px;}
   .overlay-opacity input{flex:1;min-width:0;accent-color:var(--glow);}
   .overlay-opacity output{min-width:42px;text-align:right;font:600 12px "IBM Plex Mono",monospace;color:var(--ink-soft);}
+  .design-section{grid-column:1 / -1;border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0;}
+  .design-section summary{cursor:pointer;font-weight:600;font-size:14px;}
+  .design-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px;}
+  .design-grid .full{grid-column:1 / -1;}
+  .design-grid label.fld .lab,.design-library label.fld .lab{font-size:14px;}
+  .design-grid .hint,.design-note{font-size:13px;color:var(--slate);line-height:1.5;}
+  .design-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;}
+  .design-status{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px;color:var(--slate);}
+  .design-status strong{color:var(--ink);}
+  .design-check{display:flex;align-items:center;gap:8px;font-size:14px;}
+  .design-check input{accent-color:var(--glow);width:17px;height:17px;}
+  .design-library{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);}
+  .design-preview{position:sticky;top:78px;z-index:5;}
+  .design-preview .canvas-wrap{background:#e7e8eb;}
+  .design-preview-note{margin:0;padding:7px 10px;background:var(--card);font-size:13px;color:var(--slate);border-radius:0 0 8px 8px;}
+  .style-card .name{font-size:14px;}.style-card .desc{font-size:12px;}
+  @media(max-width:900px){.design-preview{top:70px;}.design-preview #cardDisp{max-height:36vh;width:auto!important;max-width:100%!important;}.design-preview .canvas-wrap{padding:8px;}}
+  @media(max-width:520px){.design-grid{grid-template-columns:1fr;}.design-grid .full{grid-column:auto;}header{flex-wrap:wrap;position:relative;}header .acts{flex-wrap:wrap;}.design-preview{top:0;}}
 
   /* queue */
   .queue-wrap{max-width:1240px;margin:0 auto 40px;padding:0 22px;}
@@ -206,8 +224,10 @@
     <div class="panel-body">
       <div class="types" id="types"></div>
       <div id="formArea"></div>
+      <details class="design-section" style="margin-bottom:14px"><summary>Creative direction <span class="hint">(optional)</span></summary><label class="fld" style="margin:10px 0 0"><span class="lab">Direction for the graphic text</span><textarea id="creativeDirection" maxlength="800" placeholder="e.g. Lead with a question, emphasize the students, or give this series a playful headline."></textarea><span class="design-note">Used when generating the headline and subhead. Fine-tune the visual design in the Graphic tab.</span></label></details>
       <div class="glowbar" id="glowbar" style="margin-top:6px"></div>
       <button class="btn primary" id="draftBtn" style="margin-top:16px;width:100%;justify-content:center">Generate post</button>
+      <button class="btn ghost" id="manualDraftBtn" style="margin-top:6px;width:100%;justify-content:center">Start manually · no API key needed</button>
       <div id="srcErr"></div>
     </div>
   </section>
@@ -281,6 +301,30 @@ const STYLE_PRESETS={
     name:"Studio Classic",desc:"Original dark editorial system",motif:"classic",
     bg:"#1C1B19",fg:"#F4F2ED",muted:"#A89F90",accent:"#D6531F",accent2:"#D6531F",panel:"#282622",
     headline:"'Space Grotesk'",body:"'IBM Plex Sans'",label:"'IBM Plex Mono'",headlineWeight:"700"
+  },
+  editorial:{
+    name:"Rochester Editorial",desc:"Split composition + crisp serif",motif:"rule",
+    bg:"#FFFFFF",fg:"#001E5F",muted:"#40577F",accent:"#003EFF",accent2:"#FFD82B",panel:"#EEF3FF",
+    headline:"Georgia",body:"'Inter'",label:"'Inter'",headlineWeight:"700",
+    design:{layout:"split",font:"serif",decoration:"rule",radius:0,imageShare:44}
+  },
+  blueprint:{
+    name:"Lab Notebook",desc:"Technical grid + confident type",motif:"grid",
+    bg:"#001E5F",fg:"#FFFFFF",muted:"#B7D3FF",accent:"#FFD82B",accent2:"#003EFF",panel:"#092C70",
+    headline:"'Space Grotesk'",body:"'Inter'",label:"'IBM Plex Mono'",headlineWeight:"700",
+    design:{layout:"image-first",font:"space",decoration:"grid",radius:8,imageShare:42}
+  },
+  spotlight:{
+    name:"Golden Spotlight",desc:"Bright field + centered statement",motif:"frame",
+    bg:"#FFD82B",fg:"#001E5F",muted:"#243C68",accent:"#001E5F",accent2:"#003EFF",panel:"#FFE779",
+    headline:"'Inter'",body:"'Inter'",label:"'Inter'",headlineWeight:"900",
+    design:{layout:"stacked",font:"inter",align:"center",decoration:"frame",titleSize:86,radius:0}
+  },
+  bulletin:{
+    name:"Campus Bulletin",desc:"Cobalt field + framed image",motif:"corner",
+    bg:"#021BC3",fg:"#FFFFFF",muted:"#D6E2FF",accent:"#FFD82B",accent2:"#003EFF",panel:"#153BCF",
+    headline:"'Inter'",body:"'Inter'",label:"'Inter'",headlineWeight:"900",
+    design:{layout:"image-first",font:"inter",decoration:"corner",radius:28,imageShare:48,photoPanel:"solid"}
   }
 };
 const BRAND_LOGOS={
@@ -295,6 +339,113 @@ function stylePresetCards(selected){
       <span class="style-card"><span class="name">${p.name}</span><span class="desc">${p.desc}</span>
       <span class="swatches">${colors.map(c=>`<i style="background:${c}"></i>`).join("")}</span></span></label>`;
   }).join("");
+}
+/* Design recipes contain appearance only, so they can safely travel between posts. */
+const DESIGN_FONTS={serif:"Georgia, 'Times New Roman', serif",inter:"'Inter', Arial, sans-serif",space:"'Space Grotesk', Arial, sans-serif",mono:"'IBM Plex Mono', Consolas, monospace"};
+const DESIGN_DEFAULTS={layout:"stacked",font:"serif",align:"left",titleSize:76,bodySize:32,lineHeight:112,padding:72,gap:28,imageShare:40,radius:16,decoration:"rule",photoPosition:"bottom",photoPanel:"gradient",overlayOpacity:85,focusX:50,focusY:50,showLogo:true,showDept:true,showHandle:true,showDetails:true};
+const DESIGN_ENUMS={layout:["stacked","image-first","split"],font:Object.keys(DESIGN_FONTS),align:["left","center","right"],decoration:["none","rule","frame","grid","corner"],photoPosition:["top","middle","bottom"],photoPanel:["gradient","solid","none"]};
+const DESIGN_RANGES={titleSize:[40,108],bodySize:[24,44],lineHeight:[100,140],padding:[40,110],gap:[12,52],imageShare:[25,55],radius:[0,48],overlayOpacity:[0,100],focusX:[0,100],focusY:[0,100]};
+const DESIGN_COLORS=["bg","fg","muted","accent","panel"];
+const DESIGN_STORAGE="igs2_design_presets_v1";
+let designHistory=[],designHistoryGroup=null,designSections={};
+function normalizeDesign_(input,g={}){
+  const p=Object.hasOwn(STYLE_PRESETS,g.stylePreset)?STYLE_PRESETS[g.stylePreset]:STYLE_PRESETS.rochester;
+  const classic=g.stylePreset==="classic",light=classic&&g.theme==="light";
+  const defaults={...DESIGN_DEFAULTS,font:classic?"space":p.headline==="Georgia"?"serif":"inter",...p.design,
+    bg:light?"#F4F2ED":p.bg,fg:light?"#1C1B19":p.fg,muted:light?"#5B6B73":p.muted,
+    accent:classic&&/^#[0-9a-f]{6}$/i.test(g.accent)?g.accent:p.accent,panel:light?"#E6E0D5":p.panel};
+  const d={...defaults},raw=input&&typeof input==="object"&&!Array.isArray(input)?input:{};
+  if((g.template==="photo"||g.template==="reel")&&!p.design){
+    defaults.photoPosition=g.reelStyle==="banner"?"middle":"bottom";
+    defaults.photoPanel=g.reelStyle==="panel"||g.reelStyle==="banner"?"solid":"gradient";
+    d.photoPosition=defaults.photoPosition;d.photoPanel=defaults.photoPanel;
+  }
+  for(const [key,choices] of Object.entries(DESIGN_ENUMS))if(choices.includes(raw[key]))d[key]=raw[key];
+  for(const [key,[min,max]] of Object.entries(DESIGN_RANGES))if(typeof raw[key]==="number"&&Number.isFinite(raw[key]))d[key]=Math.max(min,Math.min(max,Math.round(raw[key])));
+  for(const key of DESIGN_COLORS)if(typeof raw[key]==="string"&&/^#[0-9a-f]{6}$/i.test(raw[key]))d[key]=raw[key];
+  for(const key of ["showLogo","showDept","showHandle","showDetails"])if(typeof raw[key]==="boolean")d[key]=raw[key];
+  return d;
+}
+function captureDesign_(g){return{stylePreset:Object.hasOwn(STYLE_PRESETS,g.stylePreset)?g.stylePreset:"rochester",theme:g.theme==="light"?"light":"dark",accent:/^#[0-9a-f]{6}$/i.test(g.accent)?g.accent:"#D6531F",reelStyle:["underline","panel","banner"].includes(g.reelStyle)?g.reelStyle:"underline",imageFit:g.imageFit==="cover"?"cover":"contain",design:g.design?normalizeDesign_(g.design,g):null};}
+function rememberDesign_(group){
+  if(group&&designHistoryGroup===group)return;
+  designHistory.push(captureDesign_(currentGraphic));if(designHistory.length>40)designHistory.shift();designHistoryGroup=group||null;
+}
+function applyDesign_(look){Object.assign(currentGraphic,captureDesign_(look));designHistoryGroup=null;}
+function getDesignPresets_(){
+  try{const list=JSON.parse(lsGet(DESIGN_STORAGE)||"[]");return Array.isArray(list)?list.filter(p=>p&&typeof p.id==="string"&&/^design-[a-z0-9-]+$/.test(p.id)&&typeof p.name==="string"&&p.name.trim()).slice(0,50).map(p=>({id:p.id,name:p.name.trim().slice(0,60),...captureDesign_(p)})):[];}catch(e){return[];}
+}
+function storeDesignPresets_(list){
+  const json=JSON.stringify(list);
+  // Do not claim a reusable preset was saved if browser storage is full or blocked.
+  try{localStorage.setItem(DESIGN_STORAGE,json);return true;}catch(e){toast("Could not save presets. Allow browser storage or export your design.");return false;}
+}
+function addDesignPreset_(name,look){
+  name=String(name||"").trim().slice(0,60);const list=getDesignPresets_();
+  if(!name)throw new Error("Give this preset a name.");
+  if(list.length>=50)throw new Error("Your library holds 50 presets. Export or remove one first.");
+  if(list.some(p=>p.name.toLowerCase()===name.toLowerCase()))throw new Error("That name is already in your library. Choose a different name.");
+  const id="design-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10);
+  const recipe={id,name,...captureDesign_(look)};
+  if(!storeDesignPresets_([...list,recipe]))return null;
+  return recipe;
+}
+function defaultDesign_(settings){
+  if(String(settings.stylePreset).startsWith("saved:")){
+    const found=getDesignPresets_().find(p=>"saved:"+p.id===settings.stylePreset);
+    return found?captureDesign_(found):captureDesign_({...settings,stylePreset:"rochester",design:null});
+  }
+  return captureDesign_({...settings,design:null});
+}
+function designOptions_(selected,includeSaved=true){
+  return Object.entries(STYLE_PRESETS).map(([id,p])=>`<option value="${id}"${selected===id?" selected":""}>${esc(p.name)}</option>`).join("")+(includeSaved?getDesignPresets_().map(p=>`<option value="saved:${p.id}"${selected==="saved:"+p.id?" selected":""}>My preset · ${esc(p.name)}</option>`).join(""):"");
+}
+function exportDesignPresets_(presets){
+  const blob=new Blob([JSON.stringify({type:"cheme-design-presets",version:1,presets:presets.map(p=>({name:p.name,...captureDesign_(p)}))},null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="cheme-design-presets.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function parseDesignImport_(text){
+  if(text.length>100000)throw new Error("Choose a preset library smaller than 100 KB.");
+  let data;try{data=JSON.parse(text);}catch(e){throw new Error("This file is not valid preset JSON.");}
+  if(!data||data.type!=="cheme-design-presets"||data.version!==1||!Array.isArray(data.presets)||!data.presets.length||data.presets.length>50)throw new Error("Choose a version 1 ChemE design preset export (1–50 presets).");
+  return data.presets.map(p=>{
+    if(!p||typeof p.name!=="string"||!p.name.trim()||!Object.hasOwn(STYLE_PRESETS,p.stylePreset)||!(p.design===null||(p.design&&typeof p.design==="object"&&!Array.isArray(p.design))))throw new Error("A preset is missing a name or valid design. No presets were imported.");
+    return{name:p.name.trim().slice(0,60),...captureDesign_(p)};
+  });
+}
+function importDesignPresets_(text){
+  const incoming=parseDesignImport_(text),list=getDesignPresets_();
+  if(list.length+incoming.length>50)throw new Error("This import would exceed 50 saved presets. Make room in your library first.");
+  for(const [index,p] of incoming.entries()){
+    let name=p.name,suffix=2;while(list.some(x=>x.name.toLowerCase()===name.toLowerCase()))name=p.name.slice(0,53)+" ("+(suffix++)+")";
+    list.push({...p,name,id:"design-"+Date.now().toString(36)+"-"+index+"-"+Math.random().toString(36).slice(2,8)});
+  }
+  return storeDesignPresets_(list)?incoming.length:0;
+}
+function openSaveDesign_(){
+  modal(`<h2>Save a design preset</h2><p>Reuse this look with new text and images. Your current format and post content stay separate.</p><label class="fld"><span class="lab">Preset name</span><input id="designName" type="text" maxlength="60" placeholder="e.g. Fall seminar series"></label><div id="designSaveError" role="status"></div><div class="out-acts"><button class="btn primary" id="saveDesign">Save preset</button><button class="btn" id="exportCurrentDesign">Export this look</button><button class="btn ghost" id="cancelDesign">Cancel</button></div><p class="note">Saved in this browser. Export a copy to keep a backup or use it on another device.</p>`);
+  document.getElementById("saveDesign").onclick=()=>{try{const preset=addDesignPreset_(v("designName"),currentGraphic);if(preset){closeModal();renderGraphicTab();toast("Design saved to My presets");}}catch(e){document.getElementById("designSaveError").textContent=e.message;}};
+  document.getElementById("exportCurrentDesign").onclick=()=>exportDesignPresets_([{name:v("designName").trim()||"My design",...captureDesign_(currentGraphic)}]);
+  document.getElementById("cancelDesign").onclick=closeModal;
+  document.getElementById("designName").focus();
+}
+function openDesignLibrary_(){
+  const presets=getDesignPresets_();
+  modal(`<h2>My design presets</h2><p>Build a library for recurring series, events, and new creative directions. Presets are saved in this browser.</p>
+    ${presets.length?`<label class="fld"><span class="lab">Saved preset</span><select id="libraryPreset">${presets.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label><label class="fld"><span class="lab">Name</span><input type="text" id="libraryName" maxlength="60" value="${esc(presets[0].name)}"></label><div class="design-actions"><button class="btn" id="renameDesign">Rename</button><button class="btn" id="defaultDesign">Use as default</button><button class="btn ghost" id="deleteDesign">Remove preset</button></div>`:`<p>No saved presets yet. Customize a graphic and choose “Save as preset.”</p>`}
+    <div class="design-library"><div class="design-actions"><button class="btn" id="exportDesigns"${presets.length?"":" disabled"}>Export library</button><button class="btn" id="importDesigns">Import presets</button><input type="file" id="designImportFile" accept=".json,application/json" hidden><button class="btn ghost" id="closeLibrary">Done</button></div><div id="libraryStatus" class="design-note" role="status" style="margin-top:10px"></div></div>`);
+  const selected=()=>getDesignPresets_().find(p=>p.id===v("libraryPreset"));
+  const status=message=>{document.getElementById("libraryStatus").textContent=message;};
+  if(presets.length){
+    document.getElementById("libraryPreset").onchange=()=>{document.getElementById("libraryName").value=selected().name;};
+    document.getElementById("renameDesign").onclick=()=>{const name=v("libraryName").trim(),list=getDesignPresets_(),p=selected();if(!p||!name)return status("Enter a name.");if(list.some(x=>x.id!==p.id&&x.name.toLowerCase()===name.toLowerCase()))return status("That name is already in use.");list.find(x=>x.id===p.id).name=name.slice(0,60);if(storeDesignPresets_(list)){closeModal();openDesignLibrary_();}};
+    document.getElementById("defaultDesign").onclick=()=>{saveSettings({...getSettings(),stylePreset:"saved:"+selected().id});status("This preset will be used for new posts.");};
+    document.getElementById("deleteDesign").onclick=()=>{const list=getDesignPresets_(),p=selected();if(!p)return;if(storeDesignPresets_(list.filter(x=>x.id!==p.id))){const s=getSettings();if(s.stylePreset==="saved:"+p.id)saveSettings({...s,stylePreset:"rochester"});closeModal();openDesignLibrary_();const state=document.getElementById("libraryStatus");state.textContent=`Removed ${p.name}. `;const undo=document.createElement("button");undo.className="btn sm";undo.textContent="Undo";undo.onclick=()=>{const now=getDesignPresets_();if(now.length>=50)return status("Make room in the library before restoring.");if(storeDesignPresets_([...now,p])){if(s.stylePreset==="saved:"+p.id)saveSettings({...getSettings(),stylePreset:s.stylePreset});closeModal();openDesignLibrary_();}};state.appendChild(undo);}};
+  }
+  document.getElementById("exportDesigns").onclick=()=>exportDesignPresets_(getDesignPresets_());
+  document.getElementById("importDesigns").onclick=()=>document.getElementById("designImportFile").click();
+  document.getElementById("designImportFile").onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>100000)throw new Error("Choose a preset library smaller than 100 KB.");const count=importDesignPresets_(await file.text());if(count){closeModal();openDesignLibrary_();document.getElementById("libraryStatus").textContent=`Imported ${count} preset${count===1?"":"s"}.`;}}catch(e){status(e.message);}event.target.value="";};
+  document.getElementById("closeLibrary").onclick=()=>{closeModal();if(currentGraphic&&activeTab==="graphic")renderGraphicTab();};
 }
 function getSettings(){try{return {...DEFAULTS,...JSON.parse(lsGet("igs2_settings")||"{}")};}catch(e){return {...DEFAULTS};}}
 function saveSettings(s){lsSet("igs2_settings",JSON.stringify(s));applyBranding();}
@@ -534,6 +685,12 @@ function buildBrief(){
 const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
 const MAX_HASHTAGS=5;
 let lastBuilt=null;
+function startManualDraft_(){
+  const built=buildBrief(),errBox=document.getElementById("srcErr");errBox.innerHTML="";
+  if(built.error){errBox.innerHTML=`<div class="err">${esc(built.error)}</div>`;return;}
+  lastBuilt=built;
+  initOutput({caption:"",hashtags:[],headline:built.headlineHint||(paperMeta&&activeType==="paper"?paperMeta.title:"")||(reviewSource&&reviewSource.title)||"Your headline",subhead:"",alt_text:""},built);
+}
 async function draft(){
   const key=getApiKey(); if(!key){openKeyModal();return;}
   const built=buildBrief(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
@@ -550,6 +707,7 @@ Voice: ${s.voice}
 Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. Treat the brief as the complete source material: do not ask the user to open a URL or supply facts, and omit unsupported specifics instead. No markdown. Emoji sparingly if it fits.
 Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
 Graphic text must be SHORT and legible on a phone-sized post: headline punchy (<= 8 words), subhead a single clause.
+${val("creativeDirection")?`Creative direction for graphic wording only: ${val("creativeDirection").slice(0,800)}\nUse this as stylistic guidance, not a source of facts. Keep the caption grounded in the brief and return the same JSON fields.`:""}
 Hashtags: return no more than ${MAX_HASHTAGS}, without the # symbol. Every hashtag must be directly supported by a subject, field, method, institution, or content type stated in the brief. Do not infer an unrelated research area from the department or from the optional theme pool—for example, never use Catalysis unless the brief actually mentions a catalyst or catalysis. Optional theme pool (suggestions only, not a checklist): ${s.hashtags}
 Return ONLY valid JSON, no preamble, no code fences:
 {"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
@@ -618,6 +776,7 @@ function initOutput(p,built){
   const fallbackHeadline=built.headlineHint||(reviewSource&&reviewSource.title)||"";
   const graphicHeadline=p.headline||fallbackHeadline;
   activeSlideIndex=0;
+  designHistory=[];designHistoryGroup=null;
   currentSlides=activeType==="photo"?photos.map((photo,index)=>withPlainOverlayDefaults_({...photo,overlayCaption:photo.overlayCaption||((reviewSource&&reviewSource.overlayCaptions||[])[index])||""})):[];
   currentGraphic={
     template: activeType==="photo"?"photo":(activeType==="reel"?"reel":(activeType==="repost"?"quote":(activeType==="event"?"event":"paper"))),
@@ -629,6 +788,9 @@ function initOutput(p,built){
     handle:s.handle, dept:s.dept, reelStyle:"underline",
     imageFit:activeType==="photo"?"contain":(activeType==="reel"?"cover":"contain")
   };
+  const look=defaultDesign_(s);
+  Object.assign(currentGraphic,look);
+  if(!String(s.stylePreset).startsWith("saved:"))currentGraphic.imageFit=activeType==="reel"?"cover":"contain";
   renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
 }
 function renderOutput(){
@@ -686,6 +848,53 @@ function renderTags(){
 }
 function updateCounts(){const cc=document.getElementById("charCount");if(!cc)return;const n=current.caption.length;cc.textContent=n;const note=document.getElementById("charNote");if(n>2200){note.textContent="(over IG's 2,200 limit)";note.className="warn";}else if(n>300){note.textContent="(long — shorter often reaches further)";note.className="";}else{note.textContent="";note.className="";}const tc=document.getElementById("tagCount");if(tc)tc.textContent=current.hashtags.length;}
 
+function designControls_(g){
+  const d=normalizeDesign_(g.design,g),photo=g.template==="photo"||g.template==="reel";
+  const select=(key,label,options)=>`<label class="fld"><span class="lab">${label}</span><select data-design="${key}">${options.map(([value,name])=>`<option value="${value}"${d[key]===value?" selected":""}>${name}</option>`).join("")}</select></label>`;
+  const slider=(key,label,suffix="")=>`<label class="fld"><span class="lab">${label}</span><span class="overlay-opacity"><input type="range" data-design="${key}" min="${DESIGN_RANGES[key][0]}" max="${DESIGN_RANGES[key][1]}" value="${d[key]}" aria-label="${label}"><output data-design-output="${key}">${d[key]}${suffix}</output></span></label>`;
+  const section=(id,title,content)=>`<details class="design-section" data-design-section="${id}"${designSections[id]?" open":""}><summary>${title}</summary><div class="design-grid">${content}</div></details>`;
+  return `<div class="full"><div class="design-actions"><button class="btn sm" id="varyDesign">Try a variation</button><button class="btn sm" id="undoDesign"${designHistory.length?"":" disabled"}>Undo design</button><button class="btn ghost sm" id="resetDesign">Reset to preset</button><button class="btn sm" id="saveDesignAs">Save as preset</button></div><p class="design-note">Customize any starting style. Text sizes fit down when needed. Reset restores the selected built-in look.</p></div>`+
+    section("layout","Layout & image",`${photo?select("photoPosition","Text position",[["top","Top"],["middle","Middle"],["bottom","Bottom"]])+select("photoPanel","Text backdrop",[["gradient","Gradient"],["solid","Solid panel"],["none","None"]])+slider("overlayOpacity","Backdrop opacity","%"):select("layout","Composition",[["stacked","Text above image"],["image-first","Image above text"],["split","Text beside image"]])+slider("imageShare","Image area","%")}${!g.figure&&!photo?'<p class="design-note full">Add an image to the source to use the composition and image-area controls.</p>':""}
+      ${slider("padding","Outer margin","px")}${slider("gap","Space between blocks","px")}${slider("radius","Image / panel corners","px")}
+      ${g.figure&&g.imageFit==="cover"?slider("focusX","Crop position · horizontal","%")+slider("focusY","Crop position · vertical","%"):g.figure?`<p class="design-note full">Choose “Fill frame” under Image fit to adjust the crop position.</p>`:""}`)+
+    section("type","Typography",`${select("font","Headline typeface",[["serif","Georgia · serif"],["inter","Inter · bold sans"],["space","Space Grotesk"],["mono","IBM Plex Mono"]])}${select("align","Text alignment",[["left","Left"],["center","Center"],["right","Right"]])}${slider("titleSize","Headline size","px")}${slider("bodySize","Supporting text size","px")}${slider("lineHeight","Headline line spacing","%")}`)+
+    section("color","Palette & accents",`${DESIGN_COLORS.map((key,i)=>`<label class="fld"><span class="lab">${["Background","Main text","Supporting text","Accent","Panel / backdrop"][i]}</span><input type="color" data-design="${key}" value="${d[key]}"></label>`).join("")}${select("decoration","Accent treatment",[["none","None"],["rule","Short rule"],["frame","Fine border"],["grid","Notebook grid"],["corner","Corner accents"]])}<p class="design-note full" id="designContrast" role="status"></p>`)+
+    section("brand","Branding & details",`${["showLogo","showDept","showHandle","showDetails"].map((key,i)=>`<label class="design-check"><input type="checkbox" data-design="${key}"${d[key]?" checked":""}>${["University wordmark","Department name","Instagram handle","Detail lines"][i]}</label>`).join("")}<label class="fld full"><span class="lab">Department on this graphic</span><input type="text" id="gDept" value="${esc(g.dept)}"></label><label class="fld full"><span class="lab">Handle on this graphic</span><input type="text" id="gHandle" value="${esc(g.handle)}"></label>`);
+}
+function contrastRatio_(a,b){
+  const lum=hex=>{const c=hex.slice(1).match(/../g).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return c[0]*.2126+c[1]*.7152+c[2]*.0722;};
+  const x=lum(a),y=lum(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);
+}
+function refreshDesignStatus_(){
+  const g=currentGraphic,d=normalizeDesign_(g.design,g),el=document.getElementById("designContrast");
+  if(g.design)["gTheme","gAccent","gReelStyle"].forEach(id=>{const control=document.getElementById(id);if(control)control.closest("label").remove();});
+  if(el){const photo=g.template==="photo"||g.template==="reel",bg=photo?d.panel:d.bg,ratio=Math.min(contrastRatio_(d.fg,bg),contrastRatio_(d.muted,bg));el.textContent=(ratio<4.5?"Some text has low contrast with the background. Try a lighter or darker text color.":"Text colors have good contrast with the background.")+(photo?" Check text against the photo too; backdrop opacity affects readability.":"");}
+  const status=document.getElementById("designStatus");if(status)status.textContent=(g.design?"Custom · ":"")+(STYLE_PRESETS[g.stylePreset]||STYLE_PRESETS.rochester).name;
+  const undo=document.getElementById("undoDesign");if(undo)undo.disabled=!designHistory.length;
+}
+function bindDesignControls_(){
+  const g=currentGraphic;
+  document.querySelectorAll("[data-design-section]").forEach(el=>el.ontoggle=()=>{designSections[el.dataset.designSection]=el.open;});
+  document.querySelectorAll("[data-design]").forEach(el=>{
+    el.oninput=()=>{
+      const key=el.dataset.design;rememberDesign_(key);
+      const value=el.type==="checkbox"?el.checked:el.type==="range"?Number(el.value):el.value;
+      g.design=normalizeDesign_({...normalizeDesign_(g.design,g),[key]:value},g);
+      const output=document.querySelector(`[data-design-output="${key}"]`);if(output)output.textContent=g.design[key]+(["lineHeight","overlayOpacity","imageShare","focusX","focusY"].includes(key)?"%":"px");
+      refreshDesignStatus_();drawCard("cardDisp");
+    };el.onblur=()=>{designHistoryGroup=null;};
+  });
+  const bind=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  bind("varyDesign",()=>{
+    rememberDesign_();const d=normalizeDesign_(g.design,g),pick=values=>values[Math.floor(Math.random()*values.length)];
+    g.design={...d,layout:pick(DESIGN_ENUMS.layout.filter(x=>x!==d.layout)),font:pick(DESIGN_ENUMS.font.filter(x=>x!==d.font)),decoration:pick(DESIGN_ENUMS.decoration.filter(x=>x!==d.decoration)),align:pick(["left","center"]),photoPosition:pick(DESIGN_ENUMS.photoPosition.filter(x=>x!==d.photoPosition)),radius:pick([0,16,32]),imageShare:pick([34,42,50])};renderGraphicTab();
+  });
+  bind("undoDesign",()=>{const look=designHistory.pop();if(look){applyDesign_(look);renderGraphicTab();}});
+  bind("resetDesign",()=>{rememberDesign_();g.design=null;g.theme=getSettings().theme;g.accent=getSettings().accent;renderGraphicTab();});
+  bind("saveDesignAs",openSaveDesign_);bind("manageDesigns",openDesignLibrary_);
+  const saved=document.getElementById("savedDesign");if(saved)saved.onchange=()=>{const p=getDesignPresets_().find(x=>x.id===saved.value);if(p){rememberDesign_();applyDesign_(p);renderGraphicTab();toast(`Applied ${p.name}`);}};
+  refreshDesignStatus_();
+}
 function renderGraphicTab(){
   const a=document.getElementById("tabBody");
   const g=currentGraphic;
@@ -706,7 +915,7 @@ function renderGraphicTab(){
           <option value="photo"${g.template==="photo"?" selected":""}>Photo + branded overlay (4:5)</option>
           ${current.type==="photo"?`<option value="plain"${isPlain?" selected":""}>Plain photo + per-image text (4:5)</option>`:""}
         </select></label>`;
-  const layoutControl=isReel
+  const layoutControl=isReel&&!g.design&&!STYLE_PRESETS[g.stylePreset]?.design
     ? `<label class="fld full"><span class="lab">Reel design</span>
         <select id="gReelStyle">
           <option value="underline"${(g.reelStyle||"underline")==="underline"?" selected":""}>Underline — lower third</option>
@@ -716,13 +925,14 @@ function renderGraphicTab(){
   const presetControl=isPlain?"":`<div class="full">
       <span style="display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px">Visual style</span>
       <div class="style-grid">${stylePresetCards(g.stylePreset||"rochester")}</div>
-      <span class="hint" style="display:block;font-size:11.5px;margin-top:6px">Rochester presets use approved University colors and typography. Studio Classic preserves the original design.</span>
+      <span class="design-note">University-inspired starting points, with editable palettes and layouts.</span>
+      <div class="design-library"><label class="fld"><span class="lab">My presets</span><select id="savedDesign"><option value="">Apply a saved look…</option>${getDesignPresets_().map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label><div class="design-actions"><button class="btn ghost sm" id="manageDesigns">Manage / import / export presets</button></div></div>
     </div>`;
-  const classicControls=!isPlain&&(g.stylePreset||"rochester")==="classic"?`
+  const classicControls=!isPlain&&!g.design&&(g.stylePreset||"rochester")==="classic"?`
       <label class="fld"><span class="lab">Classic theme</span><div class="seg" id="gTheme"><button data-v="dark" class="${g.theme==="dark"?"on":""}">Dark</button><button data-v="light" class="${g.theme==="light"?"on":""}">Light</button></div></label>
       <label class="fld"><span class="lab">Classic accent</span><input type="color" id="gAccent" value="${g.accent}"></label>`:"";
   const detailControls=isReel||isPlain?"":`
-      <label class="fld full"><span class="lab" id="subLab">Subhead</span><input type="text" id="gSub" value="${esc(g.template==="quote"?g.pull_quote:g.subhead)}"></label>
+      <label class="fld full"><span class="lab" id="subLab">${g.template==="quote"?"Quote text":"Subhead"}</span><textarea id="gSub">${esc(g.template==="quote"?g.pull_quote:g.subhead)}</textarea></label>
       <label class="fld"><span class="lab">Detail line 1</span><input type="text" id="gM1" value="${esc(g.meta1)}"></label>
       <label class="fld"><span class="lab">Detail line 2</span><input type="text" id="gM2" value="${esc(g.meta2)}"></label>`;
   const imageFitControl=g.figure?`
@@ -751,9 +961,9 @@ function renderGraphicTab(){
           </div>
           <span class="hint">These choices apply only to image ${activeSlideIndex+1} and are baked into its JPEG. The traditional Instagram caption stays separate.</span>`:`<span class="hint">Preview each image. The selected template is applied to every slide.</span>`}
       </div>`:"";
-  const headlineControl=isPlain?"":`<label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><input type="text" id="gHead" value="${esc(g.headline)}"></label>`;
+  const headlineControl=isPlain?"":`<label class="fld full"><span class="lab">Eyebrow / series label</span><input type="text" id="gEyebrow" value="${esc(g.eyebrow)}" placeholder="e.g. Meet our researchers"></label><label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><textarea id="gHead">${esc(g.headline)}</textarea></label>`;
   a.innerHTML=`
-    <div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div>
+    <div class="design-preview"><div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div><p class="design-preview-note"><strong id="designStatus">${isPlain?"Plain photo":""}</strong> · ${initialSize.label}<span id="designOverflow" role="status"></span></p></div>
     <div class="gctrls">
       ${formatControl}
       ${slideControl}
@@ -763,26 +973,28 @@ function renderGraphicTab(){
       ${imageFitControl}
       ${headlineControl}
       ${detailControls}
+      ${isPlain?"":designControls_(g)}
     </div>
     <div class="out-acts"><button class="btn primary" id="dlGraphic">Download ${hasCarousel?`slide ${activeSlideIndex+1}`:"JPEG"} (${initialSize.label})</button>${hasCarousel?'<button class="btn" id="dlAllGraphics">Download all slides</button>':""}<button class="btn green" id="approveBtn">Approve${hasCarousel?` ${currentSlides.length}-image carousel`:""} → queue</button></div>`;
   const redraw=()=>{
-    if(document.getElementById("gAccent"))g.accent=v("gAccent")||g.accent;
-    if(document.getElementById("gHead"))g.headline=v("gHead");
-    if(document.getElementById("gImageFit"))g.imageFit=v("gImageFit")||"contain";
-    if(isReel)g.reelStyle=v("gReelStyle")||"underline";
-    else if(!isPlain){
-      if(g.template==="quote")g.pull_quote=v("gSub"); else g.subhead=v("gSub");
-      g.meta1=v("gM1"); g.meta2=v("gM2");
-      document.getElementById("subLab").textContent=g.template==="quote"?"Quote text":"Subhead";
-    }
     const dc=document.getElementById("cardDisp"); if(dc)dc.style.maxWidth=previewWidth(g.template);
     const dl=document.getElementById("dlGraphic"); if(dl)dl.textContent=`Download ${hasCarousel?`slide ${activeSlideIndex+1}`:"JPEG"} (${graphicSize(g.template).label})`;
     drawCard("cardDisp");
   };
-  ["gReelStyle","gAccent","gImageFit","gHead","gSub","gM1","gM2"].forEach(id=>{const el=document.getElementById(id);if(el){el.oninput=redraw;el.onchange=redraw;}});
+  const graphicFields={gReelStyle:"reelStyle",gAccent:"accent",gImageFit:"imageFit",gHead:"headline",gSub:g.template==="quote"?"pull_quote":"subhead",gM1:"meta1",gM2:"meta2",gEyebrow:"eyebrow",gDept:"dept",gHandle:"handle"};
+  Object.entries(graphicFields).forEach(([id,key])=>{
+    const el=document.getElementById(id);if(!el)return;
+    el.oninput=()=>{
+      if(["gReelStyle","gAccent","gImageFit"].includes(id))rememberDesign_(id);
+      if(["gDept","gHandle","gEyebrow"].includes(id)&&!g.design){rememberDesign_();g.design=normalizeDesign_(null,g);}
+      g[key]=el.value;redraw();if(!isPlain)refreshDesignStatus_();
+    };
+    el.onblur=()=>{designHistoryGroup=null;};
+    if(id==="gImageFit")el.onchange=()=>renderGraphicTab();
+  });
   const template=document.getElementById("gTemplate");if(template)template.onchange=()=>{g.template=template.value;if(g.template==="plain")g.imageFit="contain";renderGraphicTab();};
-  document.querySelectorAll('input[name="gStyle"]').forEach(r=>r.onchange=()=>{if(!r.checked)return;redraw();g.stylePreset=r.value;renderGraphicTab();});
-  document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));drawCard("cardDisp");});
+  document.querySelectorAll('input[name="gStyle"]').forEach(r=>r.onchange=()=>{if(!r.checked)return;rememberDesign_();g.stylePreset=r.value;g.design=null;renderGraphicTab();});
+  document.querySelectorAll("#gTheme button").forEach(btn=>btn.onclick=()=>{rememberDesign_();g.theme=btn.dataset.v;document.querySelectorAll("#gTheme button").forEach(b=>b.classList.toggle("on",b===btn));refreshDesignStatus_();drawCard("cardDisp");});
   document.querySelectorAll(".slide-choice").forEach(button=>button.onclick=()=>{activeSlideIndex=Number(button.dataset.slide)||0;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();});
   const prev=document.getElementById("prevSlide"),next=document.getElementById("nextSlide");
   if(prev)prev.onclick=()=>{if(activeSlideIndex>0){activeSlideIndex--;g.figure=currentSlides[activeSlideIndex].dataUrl;renderGraphicTab();}};
@@ -809,6 +1021,7 @@ function renderGraphicTab(){
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   const downloadAll=document.getElementById("dlAllGraphics");if(downloadAll)downloadAll.onclick=downloadAllGraphics;
   document.getElementById("approveBtn").onclick=approve;
+  if(!isPlain)bindDesignControls_();
   drawCard("cardDisp");
 }
 function v(id){const e=document.getElementById(id);return e?(e.value||""):"";}
@@ -817,7 +1030,7 @@ function v(id){const e=document.getElementById(id);return e?(e.value||""):"";}
 let fontsReady=false;
 async function ensureFonts(){if(fontsReady)return;try{await Promise.all([document.fonts.load("700 80px 'Inter'"),document.fonts.load("900 80px 'Inter'"),document.fonts.load("700 80px Georgia"),document.fonts.load("700 80px 'Space Grotesk'"),document.fonts.load("600 40px 'Space Grotesk'"),document.fonts.load("500 34px 'IBM Plex Sans'"),document.fonts.load("500 26px 'IBM Plex Mono'"),document.fonts.load("500 italic 40px 'Newsreader'")]);await document.fonts.ready;}catch(e){}fontsReady=true;}
 function loadImg(src){return new Promise(res=>{if(!src)return res(null);const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src;});}
-function wrap(ctx,text,maxW){const words=String(text||"").split(/\s+/);const lines=[];let line="";for(const w of words){const test=line?line+" "+w:w;if(ctx.measureText(test).width>maxW&&line){lines.push(line);line=w;}else line=test;}if(line)lines.push(line);return lines;}
+function wrap(ctx,text,maxW){return String(text||"").trim()?designWrap_(ctx,text,maxW):[];}
 function fitLines(ctx,text,{maxW,maxH,weight,family,max,min,lh}){let size=max;for(;size>=min;size-=2){ctx.font=`${weight} ${size}px ${family}`;const lines=wrap(ctx,text,maxW);if(lines.length*size*lh<=maxH)return{size,lines};}ctx.font=`${weight} ${min}px ${family}`;return{size:min,lines:wrap(ctx,text,maxW)};}
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 function coverDraw(ctx,img,x,y,w,h){const ir=img.width/img.height,r=w/h;let sw,sh,sx,sy;if(ir>r){sh=img.height;sw=sh*r;sx=(img.width-sw)/2;sy=0;}else{sw=img.width;sh=sw/r;sx=0;sy=(img.height-sh)/2;}ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);}
@@ -1019,28 +1232,162 @@ function graphicSize(template){
 }
 function previewWidth(template){return template==="reel"?"230px":(template==="photo"||template==="plain")?"300px":"340px";}
 
+/* Flexible renderer: bounded regions keep text, images, and footers independent. */
+function designWrap_(ctx,text,width){
+  const lines=[];
+  for(const paragraph of String(text||"").replace(/\r/g,"").split("\n")){
+    let line="";
+    for(const word of paragraph.split(/\s+/).filter(Boolean)){
+      if(line&&ctx.measureText(line+" "+word).width<=width){line+=" "+word;continue;}
+      if(line){lines.push(line);line="";}
+      for(const char of Array.from(word)){
+        if(line&&ctx.measureText(line+char).width>width){lines.push(line);line="";}
+        line+=char;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function designText_(ctx,text,box,{size=32,min=24,family="'Inter', Arial, sans-serif",weight=600,color="#FFFFFF",align="left",lh=1.18}={}){
+  if(!String(text||"").trim()||box.w<=0||box.h<min*lh)return{height:0,overflow:!!String(text||"").trim()};
+  let chosen=size,lines=[];
+  for(;chosen>=min;chosen-=1){ctx.font=`${weight} ${chosen}px ${family}`;lines=designWrap_(ctx,text,box.w);if(lines.length*chosen*lh<=box.h)break;}
+  chosen=Math.max(min,chosen);ctx.font=`${weight} ${chosen}px ${family}`;
+  const capacity=Math.max(1,Math.floor(box.h/(chosen*lh))),overflow=lines.length>capacity;
+  lines=lines.slice(0,capacity);
+  if(overflow){let last=lines[lines.length-1].replace(/\s+$/,"");while(last&&ctx.measureText(last+"…").width>box.w)last=Array.from(last).slice(0,-1).join("");lines[lines.length-1]=last+"…";}
+  ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline="top";
+  const x=align==="center"?box.x+box.w/2:align==="right"?box.x+box.w:box.x;
+  lines.forEach((line,index)=>ctx.fillText(line,x,box.y+index*chosen*lh));ctx.textAlign="left";
+  return{height:lines.length*chosen*lh,overflow};
+}
+function designCover_(ctx,img,box,d){
+  const scale=Math.max(box.w/img.width,box.h/img.height),sw=box.w/scale,sh=box.h/scale;
+  ctx.drawImage(img,(img.width-sw)*d.focusX/100,(img.height-sh)*d.focusY/100,sw,sh,box.x,box.y,box.w,box.h);
+}
+function designImage_(ctx,img,box,d,fit){
+  if(box.w<=0||box.h<=0)return;
+  ctx.save();roundRect(ctx,box.x,box.y,box.w,box.h,Math.min(d.radius,box.w/2,box.h/2));ctx.clip();
+  if(fit==="cover")designCover_(ctx,img,box,d);
+  else{ctx.fillStyle=d.panel;ctx.fillRect(box.x,box.y,box.w,box.h);containDraw(ctx,img,box.x,box.y,box.w,box.h,12);}
+  ctx.restore();
+}
+function designDecor_(ctx,d,W,H){
+  ctx.save();ctx.strokeStyle=d.accent;ctx.lineWidth=3;
+  if(d.decoration==="grid"){
+    ctx.globalAlpha=.12;ctx.beginPath();for(let x=0;x<W;x+=54){ctx.moveTo(x,0);ctx.lineTo(x,H);}for(let y=0;y<H;y+=54){ctx.moveTo(0,y);ctx.lineTo(W,y);}ctx.stroke();
+  }else if(d.decoration==="frame"){ctx.strokeRect(22,22,W-44,H-44);}
+  else if(d.decoration==="corner"){
+    const p=24,len=120;ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(p,p+len);ctx.lineTo(p,p);ctx.lineTo(p+len,p);ctx.moveTo(W-p-len,H-p);ctx.lineTo(W-p,H-p);ctx.lineTo(W-p,H-p-len);ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawFlexibleCard_(ctx,g,img,W,H,logo){
+  const d=normalizeDesign_(g.design,g),photo=g.template==="photo"||g.template==="reel",reel=g.template==="reel";
+  const P=d.padding,inner=W-P*2,top=reel?270:P,bottom=H-(reel?330:P),family=DESIGN_FONTS[d.font];
+  let overflow=false;
+  ctx.clearRect(0,0,W,H);ctx.textBaseline="top";ctx.fillStyle=d.bg;ctx.fillRect(0,0,W,H);
+  if(photo&&img){
+    if(g.imageFit==="cover")designCover_(ctx,img,{x:0,y:0,w:W,h:H},d);else photoImageDraw(ctx,img,W,H,"contain");
+    if(d.photoPanel==="gradient"){
+      const grad=ctx.createLinearGradient(0,0,0,H),alpha=d.overlayOpacity/100;
+      if(d.photoPosition==="top"){grad.addColorStop(0,hexRgba(d.panel,alpha));grad.addColorStop(.5,hexRgba(d.panel,alpha*.8));grad.addColorStop(1,hexRgba(d.panel,0));}
+      else if(d.photoPosition==="middle"){grad.addColorStop(0,hexRgba(d.panel,0));grad.addColorStop(.35,hexRgba(d.panel,alpha));grad.addColorStop(.65,hexRgba(d.panel,alpha));grad.addColorStop(1,hexRgba(d.panel,0));}
+      else{grad.addColorStop(0,hexRgba(d.panel,0));grad.addColorStop(.5,hexRgba(d.panel,alpha*.8));grad.addColorStop(1,hexRgba(d.panel,alpha));}
+      ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+    }
+  }
+  designDecor_(ctx,d,W,H);
+  const header=(d.showLogo||d.showDept)?90:0;
+  const detailLines=d.showDetails?[g.meta1,g.meta2].filter(Boolean):[];
+  const footer=(detailLines.length?Math.min(160,detailLines.length*(d.bodySize*1.25+12))+20:0)+(d.showHandle&&g.handle?40:0);
+  if(photo&&d.photoPanel!=="none"){
+    ctx.fillStyle=hexRgba(d.panel,d.overlayOpacity/100);
+    if(header){roundRect(ctx,P-18,top-16,inner+36,header+24,d.radius);ctx.fill();}
+    if(footer){roundRect(ctx,P-18,bottom-footer-16,inner+36,footer+28,d.radius);ctx.fill();}
+  }
+  if(d.showLogo){
+    if(logo)containDraw(ctx,logo,P,top,d.showDept?330:390,76,0);
+    else{const result=designText_(ctx,"UNIVERSITY OF ROCHESTER",{x:P,y:top+15,w:d.showDept?330:inner,h:65},{size:24,min:20,color:d.fg,weight:700});overflow||=result.overflow;}
+  }
+  if(d.showDept&&g.dept){const result=designText_(ctx,g.dept,{x:d.showLogo?P+365:P,y:top+9,w:d.showLogo?inner-365:inner,h:76},{size:24,min:20,color:d.fg,align:d.showLogo?"right":d.align});overflow||=result.overflow;}
+  const area={x:P,y:top+(header?header+d.gap:0),w:inner,h:bottom-top-(header?header+d.gap:0)-(footer?footer+d.gap:0)};
+  let textBox={...area};
+  if(photo){
+    textBox.h=Math.min(area.h,Math.max(300,H*.3));
+    textBox.y=d.photoPosition==="top"?area.y:d.photoPosition==="middle"?area.y+(area.h-textBox.h)/2:area.y+area.h-textBox.h;
+    if(d.photoPanel==="solid"){ctx.fillStyle=hexRgba(d.panel,d.overlayOpacity/100);roundRect(ctx,textBox.x-18,textBox.y-18,textBox.w+36,textBox.h+36,d.radius);ctx.fill();}
+  }else if(img){
+    let imageBox;
+    if(d.layout==="split"){
+      const imageW=(area.w-d.gap)*d.imageShare/100;textBox.w=area.w-imageW-d.gap;
+      imageBox={x:area.x+textBox.w+d.gap,y:area.y,w:imageW,h:area.h};
+    }else{
+      const imageH=(area.h-d.gap)*d.imageShare/100;textBox.h=area.h-imageH-d.gap;
+      imageBox={x:area.x,y:d.layout==="image-first"?area.y:area.y+textBox.h+d.gap,w:area.w,h:imageH};
+      if(d.layout==="image-first")textBox.y=area.y+imageH+d.gap;
+    }
+    designImage_(ctx,img,imageBox,d,g.imageFit);
+  }
+  let cursor=textBox.y;
+  if(d.decoration==="rule"){
+    const ruleW=96,ruleX=d.align==="center"?textBox.x+(textBox.w-ruleW)/2:d.align==="right"?textBox.x+textBox.w-ruleW:textBox.x;
+    ctx.fillStyle=d.accent;ctx.fillRect(ruleX,cursor,ruleW,7);cursor+=7+d.gap;
+  }
+  if(g.eyebrow){const result=designText_(ctx,g.eyebrow,{x:textBox.x,y:cursor,w:textBox.w,h:62},{size:24,min:20,color:d.muted,align:d.align,weight:700});overflow||=result.overflow;cursor+=result.height+d.gap;}
+  const quote=g.template==="quote",headline=quote?(g.pull_quote||g.subhead||g.headline):g.headline,subhead=quote?"":g.subhead;
+  const remaining=Math.max(0,textBox.y+textBox.h-cursor),subBudget=subhead?Math.min(remaining*.34,d.bodySize*1.22*3):0;
+  const title=designText_(ctx,headline,{x:textBox.x,y:cursor,w:textBox.w,h:Math.max(0,remaining-subBudget-(subhead?d.gap:0))},{size:d.titleSize,min:30,family,weight:d.font==="inter"?900:700,color:d.fg,align:d.align,lh:d.lineHeight/100});
+  overflow||=title.overflow;cursor+=title.height+(subhead?d.gap:0);
+  if(subhead){const result=designText_(ctx,subhead,{x:textBox.x,y:cursor,w:textBox.w,h:Math.max(0,textBox.y+textBox.h-cursor)},{size:d.bodySize,min:24,color:d.muted,align:d.align});overflow||=result.overflow;}
+  let fy=bottom-footer;
+  for(const line of detailLines){
+    const result=designText_(ctx,line,{x:P,y:fy,w:inner,h:Math.min(76,(footer-(d.showHandle?40:0)-20)/detailLines.length)},{size:d.bodySize,min:22,color:d.fg,align:d.align,weight:600});overflow||=result.overflow;fy+=result.height+12;
+  }
+  if(d.showHandle&&g.handle){const result=designText_(ctx,g.handle,{x:P,y:bottom-30,w:inner,h:32},{size:24,min:20,color:d.muted,align:d.align});overflow||=result.overflow;}
+  return{overflow};
+}
+const cardRenderVersions_=new WeakMap();
 async function drawCard(canvasId,slideIndex){
-  await ensureFonts();
-  const g=currentGraphic; if(!g)return;
+  if(!currentGraphic)return;
+  const g={...currentGraphic,design:currentGraphic.design?{...currentGraphic.design}:null};
   const canvas=document.getElementById(canvasId||"cardDisp")||document.getElementById("card");
+  const version=(cardRenderVersions_.get(canvas)||0)+1;cardRenderVersions_.set(canvas,version);
+  const isLatest=()=>cardRenderVersions_.get(canvas)===version;
+  const resolvedSlideIndex=typeof slideIndex==="number"?slideIndex:activeSlideIndex;
+  const slide=current&&current.type==="photo"?{...currentSlides[resolvedSlideIndex]}:null;
+  await ensureFonts();if(!isLatest())return;
   const reel=(g.template==="reel");
   const size=graphicSize(g.template);
   const W=size.width, H=size.height, P=92;
   canvas.width=W; canvas.height=H;
   const ctx=canvas.getContext("2d");
-  const resolvedSlideIndex=typeof slideIndex==="number"?slideIndex:activeSlideIndex;
-  const slide=current&&current.type==="photo"?currentSlides[resolvedSlideIndex]:null;
   const figureSource=slide&&slide.dataUrl?slide.dataUrl:g.figure;
   const fig = figureSource ? await loadImg(figureSource) : null;
+  if(!isLatest())return;
+  const overflowNote=canvas.id==="cardDisp"?document.getElementById("designOverflow"):null;
+  if(overflowNote)overflowNote.textContent="";
   if(g.template==="plain"){
     drawPlainPhoto(ctx,fig,slide,W,H,g.imageFit||"contain");
     return paint(canvasId);
   }
   const branded=brandStyle(g);
+  if(g.design||branded.design){
+    const d=normalizeDesign_(g.design,g),onPhoto=g.template==="photo"||reel;
+    const logoBg=onPhoto?d.panel:d.bg;
+    const tone=contrastRatio_("#FFFFFF",logoBg)>contrastRatio_("#001E5F",logoBg)?"white":"navy";
+    const logo=d.showLogo?await loadImg(`assets/brand/urochester-horizontal-${tone}.png`):null;
+    if(!isLatest())return;
+    const result=drawFlexibleCard_(ctx,g,fig,W,H,logo);
+    if(overflowNote)overflowNote.textContent=result.overflow?" · Some text is shortened. Reduce type size, allow more text space, or shorten the copy.":"";
+    return paint(canvasId);
+  }
   if(branded.id!=="classic"){
     const logoSet=BRAND_LOGOS[branded.id]||{};
     const logoPath=(g.template==="photo"||reel)?logoSet.photo:logoSet.card;
     const brandLogo=logoPath?await loadImg(logoPath):null;
+    if(!isLatest())return;
     ctx.clearRect(0,0,W,H);ctx.textBaseline="top";
     drawBrandCard(ctx,g,fig,W,H,P,reel,branded,brandLogo);
     return paint(canvasId);
@@ -1457,8 +1804,9 @@ function openSettings(){
     <label class="fld"><span class="lab">Voice / tone</span><textarea id="setVoice">${esc(s.voice)}</textarea></label>
     <label class="fld"><span class="lab">Default hashtag themes</span><input type="text" id="setTags" value="${esc(s.hashtags)}"></label>
     <label class="fld"><span class="lab">Default graphic style</span><select id="setStyle">
-      ${Object.keys(STYLE_PRESETS).map(id=>`<option value="${id}"${(s.stylePreset||"rochester")===id?" selected":""}>${STYLE_PRESETS[id].name}</option>`).join("")}
+      ${designOptions_(s.stylePreset||"rochester")}
     </select><span class="hint">Rochester Navy is the recommended University-aligned default. Every generated post can still use a different preset.</span></label>
+    <button class="btn sm" id="settingsLibrary" style="margin-bottom:14px">My design preset library</button>
     <div class="row">
       <label class="fld"><span class="lab">Classic theme</span><select id="setTheme"><option value="dark"${s.theme==="dark"?" selected":""}>Dark</option><option value="light"${s.theme==="light"?" selected":""}>Light</option></select></label>
       <label class="fld"><span class="lab">Classic accent</span><input type="color" id="setAccent" value="${s.accent}"></label>
@@ -1473,6 +1821,7 @@ function openSettings(){
     <div class="out-acts" style="margin-top:8px"><button class="btn primary" id="saveSet">Save</button><button class="btn ghost" id="closeM2">Cancel</button></div>`);
   document.getElementById("saveSet").onclick=()=>{saveSettings({dept:val("setDept"),handle:val("setHandle"),voice:val("setVoice"),hashtags:val("setTags"),stylePreset:val("setStyle")||"rochester",theme:val("setTheme"),accent:val("setAccent"),length:val("setLen"),model:val("setModel"),logo:s.logo,publishUrl:val("setPublish")});toast("Saved ✓");closeModal();};
   document.getElementById("closeM2").onclick=closeModal;
+  document.getElementById("settingsLibrary").onclick=()=>{closeModal();openDesignLibrary_();};
 }
 function modal(html,wide=false){const s=document.createElement("div");s.className="scrim";s.id="scrim";s.innerHTML=`<div class="modal${wide?" wide":""}">${html}</div>`;s.onclick=e=>{if(e.target===s)closeModal();};document.body.appendChild(s);}
 function closeModal(){const s=document.getElementById("scrim");if(s)s.remove();}
@@ -1493,11 +1842,11 @@ let toastTimer;function toast(m){const t=document.getElementById("toast");t.text
 
 /* ===== init ===== */
 document.getElementById("draftBtn").onclick=draft;
+document.getElementById("manualDraftBtn").onclick=startManualDraft_;
 document.getElementById("reviewBtn").onclick=openReviewQueue;
 document.getElementById("keyBtn").onclick=openKeyModal;
 document.getElementById("settingsBtn").onclick=openSettings;
 renderTypes();renderForm();renderQueue();applyBranding();ensureFonts();
-if(!getApiKey())setTimeout(openKeyModal,400);
 </script>
 </body>
 </html>

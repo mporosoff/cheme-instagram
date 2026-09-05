@@ -18,7 +18,18 @@ The private review queue keeps a compact five-minute cache and uses validated Sh
 
 Photo graphics export at Instagram's portrait-friendly 1080×1350 size; square cards and 9:16 Reel covers remain available in the graphic editor. The **Plain photo + per-image text** template preserves each full image in a 4:5 frame and adds an independently editable text overlay to each slide, including controls for font, fill color, outline thickness/color, nine-position placement, and an optional text background with its own color and transparency. The traditional Instagram caption remains separate.
 
-The graphic editor defaults to the University-aligned **Rochester Navy** preset and offers **Cobalt Chevron**, **Ever Better Light**, and the preserved original **Studio Classic** style. Each preset works across paper, event, quote, photo, and Reel layouts; choose a different radio-card variation after generation without regenerating the caption.
+The graphic editor defaults to **Rochester Navy** and offers eight starting styles: **Cobalt Chevron**, **Ever Better Light**, **Studio Classic**, **Rochester Editorial**, **Lab Notebook**, **Golden Spotlight**, and **Campus Bulletin**. The original four looks remain available unchanged until you customize them. All styles work across paper, event, quote, photo, and Reel layouts.
+
+The admin editor now includes:
+
+- **Layout & image:** text-first, image-first, or split compositions; margins, spacing, image area, and corners; crop position when filling the frame. Photo and Reel covers have top/middle/bottom text placement and adjustable gradient or solid backdrops.
+- **Typography, palette, and branding:** four headline typefaces, alignment, sizes, line spacing, five color controls, five accent treatments, and optional wordmark, department, handle, and detail lines. Custom designs respect typed line breaks, fit text into bounded regions, and flag shortened copy in the preview.
+- **Reusable designs:** save a look under **My presets**, rename it, select it as the default for new posts, or export/import a JSON library for backup and other browsers. Libraries hold up to 50 presets and contain appearance settings only. They do not include captions, photos, API keys, or publishing credentials.
+- **Creative input:** add optional direction for AI-generated graphic wording, edit the text directly, or choose **Start manually** to build a post without an API key. **Try a variation**, **Undo design**, and **Reset to preset** make it easy to explore a new look while retaining post content.
+
+Open the **Graphic** tab, pick a starting style, then expand the design sections below the text fields. The preview stays visible while you edit. The same renderer supplies previews, JPEG downloads, and approved carousel images. Plain photo overlays retain their separate per-image controls. Saved presets stay in the browser where you created them; export a backup before clearing browser data.
+
+Run the local regression checks with `node --test tests/*.test.js`.
 
 Reels use a separate Make route: the Studio records a shared Google Drive MP4 or MOV file, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.
 
