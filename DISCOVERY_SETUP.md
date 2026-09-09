@@ -33,6 +33,12 @@ The Rochester sources and Crossref are public and require no API key or paid acc
 
 `initializeDiscovery()` creates one daily trigger, scheduled near 7 a.m. in the Apps Script project's time zone. Running it again safely replaces that trigger rather than creating duplicates.
 
+### Updating an existing installation
+
+When updating the queue backend, copy both `Code.gs` and `Discovery.gs` into the same Apps Script project and save. Publishing the website does not update Apps Script. Daily discovery uses the saved project code; the website backend uses its deployed version.
+
+If executions report "The data has 20 but the range has 24," the installed Discovery file predates the carousel columns. Replace it with the current `Discovery.gs`; otherwise every run with new candidates fails before saving any leads or sending the daily digest. Confirm a completed discovery execution and new rows in the review queue after the update.
+
 ## Normal workflow
 
 ```text
