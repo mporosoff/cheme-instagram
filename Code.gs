@@ -28,6 +28,8 @@ var REVIEW_LIST_PREVIEW_CHARS = 700;
 var REVIEW_QUEUE_CACHE_KEY = "review-queue-list-v4";
 var REVIEW_QUEUE_CACHE_SECONDS = 300;
 var REVIEW_QUEUE_CACHE_CHUNK_CHARS = 20000;
+var PAPER_GALLERY_SHEET = "Paper Gallery";
+var PAPER_GALLERY_HEADERS = ["SubmissionId", "Title", "Journal", "Authors", "Year", "ArticleURL", "Summary", "ImageFileId", "CreatedAt"];
 var HEADERS = [
   "Timestamp", "Submitter", "Credit", "Type", "Title", "Details",
   "Date", "Time", "Location", "Link", "Caption", "MediaURL",
@@ -61,6 +63,11 @@ function doGet(e) {
         status: statusItem ? statusItem.status : ""
       }, p.callback);
     }
+    // This public interface deliberately exposes only registered, Posted papers.
+    // The private queue, captions, submitters, and pending media stay behind
+    // the manager interface below.
+    if (action === "papers") return jsonp_(publicPaperGallery_(p.offset, p.q), p.callback);
+    if (action === "paperImage") return jsonp_(publicPaperImage_(p.id), p.callback);
     requireManager_(p.token);
     if (action === "list") return jsonp_({ ok: true, items: listReviewItems_() }, p.callback);
     if (action === "detail") {
@@ -128,6 +135,7 @@ function handleSubmission_(d) {
   var mediaUrl = mediaUrls[0] || "";
 
   var sourceSubmissionId = isStudio ? sanitizeId_(d.sourceSubmissionId) : "";
+  if (isStudio) registerPaperGallery_(d, submissionId, fileId);
   sheet.appendRow([
     new Date(), clean_(d.submitter || (isStudio ? "Content Studio" : ""), 150),
     clean_(d.credit, 250), clean_(d.type, 50), clean_(d.title, 500),
@@ -200,6 +208,125 @@ function normalizeSubmissionImages_(d) {
     });
   }
   return out;
+}
+
+/** Register future paper approvals without changing the Make queue schema. */
+function registerPaperGallery_(d, submissionId, imageFileId) {
+  if (String(d.type || "").toLowerCase() !== "paper") return;
+  var meta = d.paperGallery && typeof d.paperGallery === "object" ? d.paperGallery : {};
+  if (meta.enabled === false) return;
+  var articleUrl = paperArticleUrl_(meta.articleUrl || d.link);
+  if (!articleUrl) return;
+  var sheet = paperGallerySheet_(true);
+  if (sheet.getLastRow() > 1) {
+    var ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === submissionId) return;
+  }
+  sheet.appendRow([
+    submissionId, clean_(meta.title || d.title, 500), clean_(meta.journal, 250),
+    clean_(meta.authors || d.credit, 500), clean_(meta.year, 4), articleUrl,
+    clean_(meta.summary, 400), imageFileId || "", new Date()
+  ].map(function(value) {
+    // Sheets must treat AI/user-supplied metadata as text, never formulas.
+    return typeof value === "string" && /^[=+@-]/.test(value) ? "'" + value : value;
+  }));
+}
+
+function paperGallerySheet_(create) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(PAPER_GALLERY_SHEET);
+  if (!sheet && create) {
+    sheet = ss.insertSheet(PAPER_GALLERY_SHEET);
+    sheet.getRange(1, 1, 1, PAPER_GALLERY_HEADERS.length).setValues([PAPER_GALLERY_HEADERS]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function paperArticleUrl_(value) {
+  var url = clean_(value, 1000);
+  if (/^10\.\d{4,9}\/[^\s<>]+$/i.test(url)) url = "https://doi.org/" + url;
+  if (!/^https?:\/\/[^\s\/@?#<>]+(?:[\/?#][^\s<>]*)?$/i.test(url)) return "";
+  return url;
+}
+
+/** No automatic backfill: only approvals registered by this version qualify. */
+function publishedPaperRecords_() {
+  var gallery = paperGallerySheet_(false);
+  if (!gallery || gallery.getLastRow() < 2) return [];
+  var queue = getSheet_();
+  if (queue.getLastRow() < 2) return [];
+  var queueRows = queue.getRange(2, 1, queue.getLastRow() - 1, HEADERS.length).getValues();
+  var posted = Object.create(null);
+  for (var i = 0; i < queueRows.length; i++) {
+    var row = queueRows[i];
+    if (String(row[14]) === "Posted" && String(row[3]).toLowerCase() === "paper") {
+      posted[String(row[15])] = row;
+    }
+  }
+  var records = gallery.getRange(2, 1, gallery.getLastRow() - 1, PAPER_GALLERY_HEADERS.length).getValues();
+  var result = [];
+  for (var j = 0; j < records.length; j++) {
+    var record = records[j], id = String(record[0]), post = posted[id];
+    if (!post || !sanitizeId_(id)) continue;
+    var articleUrl = paperArticleUrl_(record[5]);
+    if (!articleUrl) continue;
+    var date = new Date(post[16] || post[0] || record[8]);
+    result.push({
+      id: id, title: clean_(record[1], 500), journal: clean_(record[2], 250),
+      authors: clean_(record[3], 500), year: clean_(record[4], 4),
+      articleUrl: articleUrl, summary: clean_(record[6], 400),
+      publishedAt: isNaN(date.getTime()) ? "" : date.toISOString(),
+      imageFileId: String(record[7] || "")
+    });
+  }
+  result.sort(function(a, b) { return b.publishedAt.localeCompare(a.publishedAt) || a.id.localeCompare(b.id); });
+  return result;
+}
+
+function publicPaperGallery_(offset, query) {
+  var start = Math.max(0, Math.min(100000, Math.floor(Number(offset) || 0))), size = 24;
+  var seen = Object.create(null);
+  var records = publishedPaperRecords_().filter(function(record) {
+    var key = record.articleUrl.toLowerCase().replace(/\/$/, "");
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+  var search = clean_(query, 200).toLowerCase();
+  if (search) records = records.filter(function(record) {
+    return [record.title, record.authors, record.journal, record.year, record.summary].join(" ").toLowerCase().indexOf(search) !== -1;
+  });
+  var items = records.slice(start, start + size).map(function(record) {
+    return {
+      id: record.id, title: record.title, journal: record.journal, authors: record.authors,
+      year: record.year, articleUrl: record.articleUrl, summary: record.summary,
+      publishedAt: record.publishedAt, hasImage: !!record.imageFileId
+    };
+  });
+  return { ok: true, items: items, total: records.length, nextOffset: start + size < records.length ? start + size : null };
+}
+
+function publicPaperImage_(submissionId) {
+  var id = sanitizeId_(submissionId);
+  if (!id) return { ok: false, error: "Image unavailable." };
+  // Recheck eligibility even on a cache hit, so unposting a row removes access.
+  var record = publishedPaperRecords_().filter(function(item) { return item.id === id; })[0];
+  if (!record || !record.imageFileId) return { ok: false, error: "Image unavailable." };
+  var cache = CacheService.getScriptCache(), key = "paper-image-v1:" + id;
+  var cached = cache.get(key);
+  if (cached) return JSON.parse(cached);
+  try {
+    var blob = DriveApp.getFileById(record.imageFileId).getBlob();
+    var mime = blob.getContentType(), bytes = blob.getBytes();
+    if (!/^image\/(jpeg|png|webp)$/.test(mime) || bytes.length > MAX_IMAGE_BYTES) throw new Error("Unsupported image");
+    var response = { ok: true, imageType: mime, imageBase64: Utilities.base64Encode(bytes) };
+    var encoded = JSON.stringify(response);
+    if (encoded.length < 90000) cache.put(key, encoded, 600);
+    return response;
+  } catch (err) {
+    return { ok: false, error: "Image unavailable." };
+  }
 }
 
 function enforceRateLimit_() {
