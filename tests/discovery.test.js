@@ -3,8 +3,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+const root = path.resolve(__dirname, "..");
 const propertyValues = {};
-global.HEADERS = new Array(20).fill("");
+const headerDefinition = fs.readFileSync(path.join(root, "Code.gs"), "utf8")
+  .match(/var HEADERS = (\[[\s\S]*?\]);/);
+assert.ok(headerDefinition, "load the real queue schema from Code.gs");
+global.HEADERS = vm.runInNewContext(headerDefinition[1]);
 global.PropertiesService = {
   getScriptProperties() {
     return {
@@ -23,7 +27,6 @@ global.Utilities = {
   sleep() {}
 };
 
-const root = path.resolve(__dirname, "..");
 vm.runInThisContext(fs.readFileSync(path.join(root, "Discovery.gs"), "utf8"), {
   filename: "Discovery.gs"
 });
@@ -117,9 +120,14 @@ const savedRows = [];
 global.getSheet_ = function() {
   return {
     getLastRow() { return 1; },
-    getRange() {
+    getRange(_row, _column, rowCount, columnCount) {
       return {
-        setValues(rows) { savedRows.push.apply(savedRows, rows); },
+        setValues(rows) {
+          assert.equal(rows.length, rowCount, "row count must match the sheet range");
+          rows.forEach((row) => assert.equal(row.length, columnCount,
+            "discovery rows must match the live queue column count"));
+          savedRows.push.apply(savedRows, rows);
+        },
         getValues() { return []; }
       };
     }
@@ -147,6 +155,23 @@ assert.equal(saveResult.imagesAdded, 0);
 assert.equal(propertyValues.LAB_PAGE_ONE, "hash-one", "saved page state should be committed");
 assert.equal(propertyValues.LAB_PAGE_TWO, undefined, "deferred page state must remain pending for retry");
 assert.match(savedRows[0][5], /DISCOVERY MONITOR ID: LAB_PAGE_ONE:hash-one/);
+assert.deepEqual(savedRows[0].slice(20), ["", "", "", 0],
+  "text-only leads must include the four carousel fields");
+
+const originalDownloadDiscoveryImage = downloadDiscoveryImage_;
+downloadDiscoveryImage_ = () => ({
+  fileId: "source-image", driveUrl: "https://drive.google.com/file/d/source-image/view",
+  credit: "Source credit", sourceUrl: "https://example.edu/image.jpg", kind: "Article image"
+});
+DISCOVERY_CONFIG.downloadThirdPartyImages = true;
+saveDiscoveryCandidates_([candidates[1]]);
+assert.deepEqual(savedRows[1].slice(20), [
+  '["source-image"]', '["https://drive.google.com/file/d/source-image/view"]', "", 1
+], "image leads must populate the carousel fields as well as the legacy image fields");
+assert.equal(savedRows[1][12], "source-image");
+assert.equal(savedRows[1][14], "New", "discovered leads still require review");
+downloadDiscoveryImage_ = originalDownloadDiscoveryImage;
+DISCOVERY_CONFIG.downloadThirdPartyImages = false;
 
 const oldDiscoveryRow = new Array(20).fill("");
 oldDiscoveryRow[1] = "Discovery Bot";
