@@ -29,6 +29,8 @@ The admin editor now includes:
 
 Open the **Graphic** tab, pick a starting style, then expand the design sections below the text fields. The preview stays visible while you edit. The same renderer supplies previews, JPEG downloads, and approved carousel images. Plain photo overlays retain their separate per-image controls. Saved presets stay in the browser where you created them; export a backup before clearing browser data.
 
+Use **Zoom preview** beneath the graphic to inspect it in a larger window. Choose **Fit** or **25–200%**, then scroll or swipe to inspect details. **Close** or **Escape** returns to the editor. Zoom also works for individual carousel slides and Reel covers, and never changes the exported image size.
+
 Run the local regression checks with `node --test tests/*.test.js`.
 
 Reels use a separate Make route: the Studio records a shared Google Drive MP4 or MOV file, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.

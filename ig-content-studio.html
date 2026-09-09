@@ -153,6 +153,22 @@
   .design-preview{position:sticky;top:78px;z-index:5;}
   .design-preview .canvas-wrap{background:#e7e8eb;}
   .design-preview-note{margin:0;padding:7px 10px;background:var(--card);font-size:13px;color:var(--slate);border-radius:0 0 8px 8px;}
+  .preview-tools{display:flex;justify-content:flex-end;padding:6px 0;background:var(--card);}
+  .graphic-zoom-dialog{width:min(1400px,96vw);height:94dvh;max-width:96vw;max-height:94dvh;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:var(--shadow);}
+  .graphic-zoom-dialog[open]{display:flex;flex-direction:column;}
+  .graphic-zoom-dialog::backdrop{background:rgba(15,20,30,.7);}
+  .graphic-zoom-head,.graphic-zoom-tools{display:flex;align-items:center;gap:10px;padding:12px 16px;flex:none;}
+  .graphic-zoom-head{justify-content:space-between;border-bottom:1px solid var(--line);}
+  .graphic-zoom-head h2{margin:0;font-size:18px;}
+  .graphic-zoom-tools{flex-wrap:wrap;font-size:14px;}
+  .graphic-zoom-tools select{width:auto;min-width:100px;}
+  .graphic-zoom-tools output{color:var(--slate);font-variant-numeric:tabular-nums;}
+  .graphic-zoom-viewport{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;background:#e7e8eb;}
+  .graphic-zoom-viewport:focus-visible{outline:2px solid var(--glow);outline-offset:-3px;}
+  .graphic-zoom-surface{width:max-content;min-width:100%;min-height:100%;padding:20px;display:grid;place-items:center;}
+  #cardZoom{display:block;max-width:none;max-height:none;box-shadow:0 2px 15px rgba(0,0,0,.18);}
+  .graphic-zoom-hint{margin:0;padding:8px 16px;font-size:13px;color:var(--slate);}
+  @media(max-width:520px){.graphic-zoom-head,.graphic-zoom-tools{padding:10px;gap:8px;}.graphic-zoom-head h2{font-size:16px;}.graphic-zoom-tools .btn{padding:8px 12px;}}
   .style-card .name{font-size:14px;}.style-card .desc{font-size:12px;}
   @media(max-width:900px){.design-preview{top:70px;}.design-preview #cardDisp{max-height:36vh;width:auto!important;max-width:100%!important;}.design-preview .canvas-wrap{padding:8px;}}
   @media(max-width:520px){.design-grid{grid-template-columns:1fr;}.design-grid .full{grid-column:auto;}header{flex-wrap:wrap;position:relative;}header .acts{flex-wrap:wrap;}.design-preview{top:0;}}
@@ -963,7 +979,7 @@ function renderGraphicTab(){
       </div>`:"";
   const headlineControl=isPlain?"":`<label class="fld full"><span class="lab">Eyebrow / series label</span><input type="text" id="gEyebrow" value="${esc(g.eyebrow)}" placeholder="e.g. Meet our researchers"></label><label class="fld full"><span class="lab">Headline <span class="hint">(on the graphic)</span></span><textarea id="gHead">${esc(g.headline)}</textarea></label>`;
   a.innerHTML=`
-    <div class="design-preview"><div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div><p class="design-preview-note"><strong id="designStatus">${isPlain?"Plain photo":""}</strong> · ${initialSize.label}<span id="designOverflow" role="status"></span></p></div>
+    <div class="design-preview"><div class="canvas-wrap"><canvas id="cardDisp" width="${initialSize.width}" height="${initialSize.height}" style="width:100%;max-width:${previewWidth(g.template)};height:auto;border-radius:6px;box-shadow:var(--shadow)"></canvas></div><p class="design-preview-note"><strong id="designStatus">${isPlain?"Plain photo":""}</strong> · ${initialSize.label}<span id="designOverflow" role="status"></span></p><div class="preview-tools"><button type="button" class="btn sm" id="zoomPreview" aria-haspopup="dialog">Zoom preview ↗</button></div></div>
     <div class="gctrls">
       ${formatControl}
       ${slideControl}
@@ -1021,6 +1037,7 @@ function renderGraphicTab(){
   document.getElementById("dlGraphic").onclick=downloadGraphic;
   const downloadAll=document.getElementById("dlAllGraphics");if(downloadAll)downloadAll.onclick=downloadAllGraphics;
   document.getElementById("approveBtn").onclick=approve;
+  document.getElementById("zoomPreview").onclick=openGraphicZoom_;
   if(!isPlain)bindDesignControls_();
   drawCard("cardDisp");
 }
@@ -1231,6 +1248,45 @@ function graphicSize(template){
   return{width:1080,height:1080,label:"1080×1080"};
 }
 function previewWidth(template){return template==="reel"?"230px":(template==="photo"||template==="plain")?"300px":"340px";}
+
+/* Zoom is a view preference; it never changes artwork or export dimensions. */
+let previewZoom_="fit";
+function openGraphicZoom_(){
+  if(!currentGraphic||document.getElementById("graphicZoom"))return;
+  const opener=document.activeElement,slideIndex=activeSlideIndex,size=graphicSize(currentGraphic.template);
+  const steps=[25,50,75,100,150,200],dialog=document.createElement("dialog");
+  dialog.id="graphicZoom";dialog.className="graphic-zoom-dialog";
+  dialog.setAttribute("aria-labelledby","graphicZoomTitle");
+  dialog.innerHTML=`<div class="graphic-zoom-head"><h2 id="graphicZoomTitle">Graphic preview${currentSlides.length>1?` · Image ${slideIndex+1} of ${currentSlides.length}`:""}</h2><button type="button" class="btn" id="closeGraphicZoom" autofocus>Close</button></div>
+    <div class="graphic-zoom-tools"><label for="graphicZoomScale">Zoom</label><button type="button" class="btn" id="graphicZoomOut" aria-label="Zoom out">−</button><select id="graphicZoomScale"><option value="fit">Fit</option>${steps.map(value=>`<option value="${value}">${value}%</option>`).join("")}</select><button type="button" class="btn" id="graphicZoomIn" aria-label="Zoom in">+</button><output id="graphicZoomLevel" aria-live="polite"></output></div>
+    <div class="graphic-zoom-viewport" tabindex="0" role="region" aria-label="Enlarged graphic; scroll to inspect details"><div class="graphic-zoom-surface"><canvas id="cardZoom" width="${size.width}" height="${size.height}" role="img" aria-label="${esc(currentGraphic.headline||"Generated graphic")}"></canvas></div></div>
+    <p class="graphic-zoom-hint" id="graphicZoomHint" role="status">Rendering preview…</p>`;
+  document.body.appendChild(dialog);
+  const viewport=dialog.querySelector(".graphic-zoom-viewport"),canvas=dialog.querySelector("canvas"),select=dialog.querySelector("select");
+  const less=dialog.querySelector("#graphicZoomOut"),more=dialog.querySelector("#graphicZoomIn"),level=dialog.querySelector("output");
+  select.value=previewZoom_;
+  let scale=1;
+  const resize=()=>{
+    const centerX=(viewport.scrollLeft+viewport.clientWidth/2)/Math.max(1,viewport.scrollWidth);
+    const centerY=(viewport.scrollTop+viewport.clientHeight/2)/Math.max(1,viewport.scrollHeight);
+    scale=select.value==="fit"?Math.max(.05,Math.min(1,(viewport.clientWidth-40)/size.width,(viewport.clientHeight-40)/size.height)):Number(select.value)/100;
+    canvas.style.width=`${size.width*scale}px`;canvas.style.height=`${size.height*scale}px`;
+    viewport.scrollLeft=viewport.scrollWidth*centerX-viewport.clientWidth/2;
+    viewport.scrollTop=viewport.scrollHeight*centerY-viewport.clientHeight/2;
+    level.textContent=`${select.value==="fit"?"Fit · ":""}${Math.round(scale*100)}%`;
+    less.disabled=scale<=steps[0]/100;more.disabled=scale>=steps[steps.length-1]/100;
+  };
+  const setZoom=value=>{select.value=String(value);previewZoom_=select.value;resize();};
+  select.onchange=()=>setZoom(select.value);
+  less.onclick=()=>setZoom([...steps].reverse().find(value=>value<scale*100-.01)||steps[0]);
+  more.onclick=()=>setZoom(steps.find(value=>value>scale*100+.01)||steps[steps.length-1]);
+  dialog.querySelector("#closeGraphicZoom").onclick=()=>dialog.close();
+  const oldOverflow=document.documentElement.style.overflow;
+  const observer=new ResizeObserver(resize);
+  dialog.onclose=()=>{observer.disconnect();document.documentElement.style.overflow=oldOverflow;dialog.remove();if(opener&&opener.isConnected)opener.focus({preventScroll:true});};
+  dialog.showModal();document.documentElement.style.overflow="hidden";resize();observer.observe(viewport);
+  drawCard("cardZoom",slideIndex).then(()=>{dialog.querySelector("#graphicZoomHint").textContent="Scroll or swipe to inspect details. Zoom changes the preview only.";}).catch(()=>{dialog.querySelector("#graphicZoomHint").textContent="Could not load this preview. Close it and try again.";});
+}
 
 /* Flexible renderer: bounded regions keep text, images, and footers independent. */
 function designWrap_(ctx,text,width){
