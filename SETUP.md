@@ -176,9 +176,18 @@ The public form includes a honeypot, server-side field/media validation, a globa
 
 ## Files at a glance
 
+### Paper library and AI graphics
+
+Deploy the updated `Code.gs` as a **new version of the existing web-app deployment**, keeping its URL. Publish `papers.html` and the updated Studio through GitHub Pages. The library uses the same endpoint configured in `papers.html`; change that constant only when using a different deployment. No initialization or historical import is needed. A separate **Paper Gallery** tab is created automatically on the first eligible paper approval; the existing `Posts` columns A–X and Make mappings remain unchanged.
+
+Add `https://mporosoff.github.io/cheme-instagram/papers.html` once to Instagram’s profile links or an existing Linktree, with a label such as **Read our research**. Each new paper approval registers its article title, link, optional metadata, and first approved graphic. Public results require a matching `Posted` paper row in `Posts`. `Ready`, `Processing`, `Error`, and review submissions are excluded. Removing the matching registry row removes an entry; keeping the original approved media in Drive keeps its graphic available. The public endpoint exposes only the selected paper metadata and eligible graphics, not private queue records. Search includes titles, authors, journals, years, and summaries; repeated article URLs appear once, newest first. Hosting and this gallery workflow add no paid service, subject to the existing free Google and GitHub service quotas.
+
+In the Studio, **AI Generate** offers three routes: prepare a prompt and upload an image made elsewhere; create a simple illustrated diagram using the existing Claude API key; or generate an image with an OpenAI image API key. Prompt preparation needs no key or API call. The other two routes incur the selected provider’s API usage; image generation is separate from a ChatGPT subscription. OpenAI currently uses `gpt-image-2.5-flare`, one JPEG per request, with draft/standard/detailed quality. The image key can be remembered in the current tab or forgotten from the dialog. Requests go directly from the browser to the selected provider, using the paper facts and creative prompt. A generated image is only a candidate until **Use this graphic** is selected, and publication still requires **Approve**. Check illustrations against the paper before publishing. Image-only templates export at 1080×1350 or 1080×1080 without institutional overlays.
+
 | File | For whom | Where it goes |
 |---|---|---|
 | `ig-content-studio.html` | You | GitHub Pages (or open locally) |
 | `cheme-submission-form.html` | Colleagues | GitHub Pages — share the link |
+| `papers.html` | Instagram visitors | GitHub Pages — bio or Linktree link |
 | `Code.gs` | (behind the scenes) | Pasted into the Sheet's Apps Script |
 | `SETUP.md` | You | this guide |

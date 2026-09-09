@@ -8,6 +8,7 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 |---|---|---|
 | `ig-content-studio.html` | The **Content Studio** — review department submissions, generate captions + graphics, and hit **Approve**. | You |
 | `cheme-submission-form.html` | A **submission form** colleagues can use to send you raw material. | Colleagues (optional) |
+| `papers.html` | A public, searchable **paper library** linking new posted graphics to their articles. | Instagram visitors |
 | `Code.gs` | A Google Apps Script that catches submissions/approvals and files them into a Google Sheet. | Behind the scenes |
 | `Discovery.gs` | Optional faculty-news/publication discovery that adds verified-by-you leads to the review queue. | Behind the scenes |
 | `SETUP.md` | The full, do-this-then-that setup guide (≈1 hour, mostly one-time). | You |
@@ -32,6 +33,10 @@ Open the **Graphic** tab, pick a starting style, then expand the design sections
 Use **Zoom preview** beneath the graphic to inspect it in a larger window. Choose **Fit** or **25–200%**, then scroll or swipe to inspect details. **Close** or **Escape** returns to the editor. Zoom also works for individual carousel slides and Reel covers, and never changes the exported image size.
 
 Run the local regression checks with `node --test tests/*.test.js`.
+
+**AI Generate** turns the paper facts into an unbranded graphic. Choose an explainer, everyday analogy, material cutaway, magazine illustration, photo-inspired concept, or minimal abstract look. Set the audience, amount of text, square/portrait format, and your own creative direction; the full prompt is editable. The free **Prompt + upload** workflow prepares a prompt for a generator you already use. **Illustrated diagram** uses the existing Claude key and text API usage. **AI image** uses your OpenAI image API key and separate API billing; a ChatGPT subscription does not include those API calls. The optional image key is kept in this browser tab only, and never sent to the queue or gallery. Review the result and choose **Use this graphic** before approving. **Restore previous graphic** reverses the replacement. Caption regeneration preserves the artwork and gallery edits when the source paper is unchanged.
+
+The **[paper library](https://mporosoff.github.io/cheme-instagram/papers.html)** runs on the existing free GitHub Pages site. Add its URL to Instagram’s bio links or Linktree once. Under **Paper gallery** in the Studio, review the article title and DOI/link, and optionally add journal, authors, year, and a short summary. New approved paper posts appear automatically with their published graphic when Make records **Posted**. Earlier posts are not backfilled, and drafts or failed posts stay private. Uncheck the gallery option to exclude an individual paper. No Make changes or additional hosting subscription are needed.
 
 Reels use a separate Make route: the Studio records a shared Google Drive MP4 or MOV file, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.
 
@@ -59,10 +64,11 @@ The full walkthrough is in **[SETUP.md](SETUP.md)**. The big steps:
 3. **Host the pages** — this repo can publish them free via **GitHub Pages** (Settings ▸ Pages ▸ Deploy from `main` / root).
 4. **Auto-posting** — wire up Make to watch the sheet, upload the image to Cloudinary, and post its public URL.
 
-Once hosted, your two pages live at:
+Once hosted, your pages live at:
 
 - Studio (bookmark for yourself): `https://mporosoff.github.io/cheme-instagram/ig-content-studio.html`
 - Form (share with colleagues): `https://mporosoff.github.io/cheme-instagram/cheme-submission-form.html`
+- Papers (Instagram bio or Linktree): `https://mporosoff.github.io/cheme-instagram/papers.html`
 
 To supplement colleague submissions with faculty news and newly indexed publications, see **[DISCOVERY_SETUP.md](DISCOVERY_SETUP.md)** and the complete **[source coverage table](DISCOVERY_COVERAGE.md)**. The optional discovery job can collect source-attributed social-preview images, but it never auto-publishes; every lead enters the existing review queue as **New**.
 
