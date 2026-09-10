@@ -187,6 +187,7 @@
   .qempty{color:var(--slate);font-size:13.5px;padding:8px 0;}
 
   .scrim{position:fixed;inset:0;background:rgba(28,27,25,.45);display:flex;align-items:center;justify-content:center;padding:18px;z-index:50;}
+  .paper-steps{font-size:12px;line-height:1.8;color:var(--slate);padding:12px;background:var(--paper);border:1px solid var(--line);border-radius:8px;margin:0 0 18px}.paper-steps span{padding:0 5px}.selected-paper-image{display:flex;gap:15px;align-items:center;border:1px solid #a9c9b8;background:#f1f8f3;border-radius:10px;padding:14px;margin-bottom:18px}.selected-paper-image img{width:76px;height:95px;object-fit:contain;background:white;border-radius:5px;flex-shrink:0}.selected-paper-image strong{font-size:14px}.selected-paper-image p,.caption-next{font-size:13px;line-height:1.55;margin:6px 0 10px}.tabs button.tab{background:transparent;border:0;font-family:inherit}.tabs button.tab.active{background:var(--card);border-bottom:2px solid var(--glow)}
   .modal{background:var(--card);border-radius:14px;max-width:480px;width:100%;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:90vh;overflow:auto;}.modal [hidden]{display:none!important}
   .modal h2{margin:0 0 6px;font-size:19px;}
   .modal p{color:var(--ink-soft);font-size:13.5px;margin:0 0 16px;}
@@ -244,6 +245,7 @@
       <details class="design-section" style="margin-bottom:14px"><summary>Creative direction <span class="hint">(optional)</span></summary><label class="fld" style="margin:10px 0 0"><span class="lab">Direction for the graphic text</span><textarea id="creativeDirection" maxlength="800" placeholder="e.g. Lead with a question, emphasize the students, or give this series a playful headline."></textarea><span class="design-note">Used when generating the headline and subhead. Fine-tune the visual design in the Graphic tab.</span></label></details>
       <div class="glowbar" id="glowbar" style="margin-top:6px"></div>
       <button class="btn primary" id="draftBtn" style="margin-top:16px;width:100%;justify-content:center">Generate post</button>
+      <p class="hint" id="draftHelp" aria-live="polite"></p>
       <button class="btn ghost" id="manualDraftBtn" style="margin-top:6px;width:100%;justify-content:center">Start manually · no API key needed</button>
       <div id="srcErr"></div>
     </div>
@@ -491,15 +493,19 @@ function renderTypes(){
 function renderForm(){
   const a=document.getElementById("formArea");
   if(activeType==="paper"){
-    a.innerHTML=`<label class="fld"><span class="lab">DOI <span class="hint">— auto-fetches title, authors & abstract</span></span>
+    a.innerHTML=`<p class="paper-steps">1. Add paper details <span>→</span> 2. Choose an image <span>→</span> 3. Write caption &amp; review</p><label class="fld"><span class="lab">DOI <span class="hint">— auto-fetches title, authors & abstract</span></span>
       <div class="doi-row"><input type="text" id="doi" placeholder="10.1021/jacs.xxxxxx" autocomplete="off"><button class="btn sm" id="fetchDoi">Fetch</button></div></label>
       <div id="paperMetaBox"></div>
       <label class="fld"><span class="lab">Or paste the abstract / a one-line summary</span><textarea id="paperText" placeholder="Paste the abstract or describe the finding..."></textarea></label>
       <label class="fld"><span class="lab">Angle <span class="hint">(optional)</span></span><input type="text" id="paperAngle" placeholder="e.g. celebrate the grad-student first author"></label>
-      ${figureSlot("Add a figure / TOC graphic (optional)")}<button class="btn" id="paperAIGenerate">✦ AI Generate graphic</button><p class="hint" style="margin-top:8px">Turn the paper into a simple, unbranded visual. Choose a look and add your own direction.</p>`;
+      <label class="fld"><span class="lab">Research group / authors to credit</span><input type="text" id="paperCredit" maxlength="300" placeholder="e.g. Shestopalov group"><span class="hint">Filled from the paper or submission when available. Edit this to name the group exactly as it should appear in the caption.</span></label>
+      ${figureSlot("Use a paper figure (optional)")}<button class="btn" id="paperAIGenerate">✦ Create an AI image</button><p class="hint" style="margin-top:8px">Choose a generated image, then write its caption. Your chosen image stays with the post.</p>`;
     if(paperMeta)renderPaperMeta();
     document.getElementById("fetchDoi").onclick=fetchDoi; wireFigure();
-    document.getElementById("paperAIGenerate").onclick=()=>{const built=buildSourceBrief_();if(!built.error&&current&&current.type==="paper"&&current.imageSourceBrief===built.brief)openAIGraphic_();else if(startManualDraft_())openAIGraphic_();};
+    document.getElementById("paperCredit").value=defaultPaperCredit_();
+    document.getElementById("paperAIGenerate").onclick=openPaperImage_;
+    ["doi","paperText","paperAngle","paperCredit"].forEach(id=>document.getElementById(id).addEventListener("input",refreshDraftAction_));
+    document.getElementById("doi").oninput=()=>{if(paperMeta&&paperMeta.doi&&paperMeta.doi!==normalizedPaperLink_(val("doi"))){const oldDefault=defaultPaperCredit_();if(val("paperCredit")===oldDefault)setField("paperCredit","");if(val("paperText")===paperMeta.abstract)setField("paperText","");paperMeta=null;document.getElementById("paperMetaBox").innerHTML="";}refreshDraftAction_();};
   } else if(activeType==="event"){
     a.innerHTML=`<label class="fld"><span class="lab">Event title</span><input type="text" id="evTitle" placeholder="Spring Seminar: Catalysis for a Carbon-Negative Future"></label>
       <div class="row"><label class="fld"><span class="lab">Date</span><input type="date" id="evDate"></label><label class="fld"><span class="lab">Time</span><input type="text" id="evTime" placeholder="3:30 PM"></label></div>
@@ -542,6 +548,7 @@ function renderForm(){
     fi.onchange=e=>handleReel(e.target.files[0]); renderReelThumb();
   }
   renderLoadedReviewBanner();
+  refreshDraftAction_();
 }
 function renderLoadedReviewBanner(){
   if(!reviewSource)return;
@@ -633,6 +640,42 @@ function renderThumbs(){const t=document.getElementById("thumbs");if(!t)return;t
 function movePhoto_(index,direction){const target=index+direction;if(target<0||target>=photos.length)return;const held=photos[index];photos[index]=photos[target];photos[target]=held;syncCurrentSlides_();renderThumbs();}
 function updatePhotoDrop_(){const drop=document.getElementById("drop");if(!drop)return;drop.innerHTML=photos.length?`${photos.length} photo${photos.length===1?"":"s"} ready — <b>click or drop to add more</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`:`Drop one or more photos or <b>click to upload</b><br><span style="font-size:12px">Up to ${MAX_CAROUSEL_IMAGES} images in carousel order · JPEG, PNG, or WebP</span>`;}
 
+/* ===== Paper identity, attribution, and the image-to-caption flow ===== */
+function normalizedPaperLink_(value){
+  const raw=String(value||"").trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");
+  return /^10\.\d{4,9}\/[^\s<>]+$/i.test(raw)?"https://doi.org/"+raw.toLowerCase():safeSourceLink_(raw);
+}
+function defaultPaperCredit_(){
+  if(reviewSource&&String(reviewSource.type).toLowerCase()==="paper"&&reviewSource.credit)return String(reviewSource.credit).trim().slice(0,300);
+  const local=paperMeta&&paperMeta.rochesterAuthors||[];
+  return local.length?local.join(", ").slice(0,300):(paperMeta&&(paperMeta.authorCredit||paperMeta.authors)||"").slice(0,300);
+}
+function sameDraftSource_(built){
+  if(!current||current.type!==activeType||!built||built.error)return false;
+  return built.sourceKey&&current.sourceKey?built.sourceKey===current.sourceKey:current.imageSourceBrief===built.brief;
+}
+function openPaperImage_(){
+  const built=buildSourceBrief_();if(!built.error&&sameDraftSource_(built)){current.imageSourceBrief=built.brief;lastBuilt=built;openAIGraphic_();}else if(startManualDraft_())openAIGraphic_();
+}
+let draftBusy=false;
+function refreshDraftAction_(){
+  const button=document.getElementById("draftBtn"),help=document.getElementById("draftHelp");if(!button)return;
+  const paper=activeType==="paper",built=paper?buildSourceBrief_():null,same=paper&&sameDraftSource_(built),selected=same&&currentGraphic&&currentGraphic.generatedImage;
+  button.disabled=draftBusy;button.textContent=draftBusy?"Generating…":selected?(current.caption?"Regenerate caption · keep image":"Generate caption · keep image"):(same&&current.caption?"Regenerate post":"Generate post");
+  if(help)help.textContent=selected?"Your selected AI image will stay exactly as shown. This step writes the caption and hashtags.":paper?(currentGraphic&&currentGraphic.generatedImage&&!same?"The paper details changed. Choose an image for this paper; the earlier image will not carry over.":"Choose an AI image above, or generate a caption with a paper-card design."):"";
+  const imageHelp=document.getElementById("selectedImageHelp");if(imageHelp)imageHelp.textContent=same?"Caption generation keeps this image. Approval sends it with your caption.":"This image belongs to the earlier paper. Choose an image for the current paper before generating its caption.";
+  const regen=document.getElementById("regen");if(regen){regen.disabled=draftBusy;regen.textContent=draftBusy?"Generating caption…":(same||!paper?(current&&current.caption?"Regenerate caption":"Generate caption"):"Generate new post")+(selected?" · keep image":"");}
+}
+function selectedPaperImage_(){
+  if(!current||current.type!=="paper"||!currentGraphic||!currentGraphic.generatedImage)return"";
+  return `<div class="selected-paper-image"><img src="${esc(currentGraphic.figure)}" alt="Selected image for this post"><div><strong>Selected image for this post ✓</strong><p id="selectedImageHelp">Caption generation keeps this image. Approval sends it with your caption.</p><button class="btn sm" id="changePaperImage">Change image</button></div></div>`;
+}
+function continueWithAIImage_(){
+  closeModal();activeTab=current.type==="paper"?"caption":"graphic";renderOutput();refreshDraftAction_();
+  const output=document.getElementById("outArea");if(output&&output.scrollIntoView)output.scrollIntoView({behavior:"smooth",block:"start"});
+  toast(current.type==="paper"?"Image selected — next, write or generate the caption":"Unbranded graphic applied ✓");
+}
+
 /* ===== DOI via Crossref (slash-safe) ===== */
 async function fetchDoi(){
   let raw=(document.getElementById("doi").value||"").trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
@@ -644,12 +687,16 @@ async function fetchDoi(){
     if(!r.ok)throw new Error("HTTP "+r.status);
     const m=(await r.json()).message;
     const authorList=m.author||[];
-    const auth=authorList.slice(0,4).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ")+(authorList.length>4?", et al.":"");
+    const auth=authorList.map(a=>[a.given,a.family].filter(Boolean).join(" ")).filter(Boolean).join(", ");
     const firstAuthor=authorList[0]?[authorList[0].given,authorList[0].family].filter(Boolean).join(" "):"";
     const authorCredit=firstAuthor+(authorList.length>1?" et al.":"");
-    paperMeta={title:(m.title&&m.title[0])||"(untitled)",authors:auth||"",authorCredit:authorCredit,journal:(m["container-title"]&&m["container-title"][0])||"",year:(((m.published||{})["date-parts"]||[[]])[0]||[])[0]||"",abstract:(m.abstract||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()};
+    const rochesterAuthors=authorList.filter(a=>(a.affiliation||[]).some(aff=>/\b(?:university of rochester|rochester university)\b/i.test(aff.name||""))).map(a=>[a.given,a.family].filter(Boolean).join(" ")).filter(Boolean);
+    const priorDefault=defaultPaperCredit_(),creditField=document.getElementById("paperCredit");
+    paperMeta={doi:normalizedPaperLink_(raw),title:(m.title&&m.title[0])||"(untitled)",authors:auth||"",authorCredit:authorCredit,rochesterAuthors,journal:(m["container-title"]&&m["container-title"][0])||"",year:(((m.published||{})["date-parts"]||[[]])[0]||[])[0]||"",abstract:(m.abstract||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()};
+    if(creditField&&(!creditField.value.trim()||creditField.value===priorDefault))creditField.value=defaultPaperCredit_();
     renderPaperMeta();
     if(paperMeta.abstract)document.getElementById("paperText").value=paperMeta.abstract;
+    refreshDraftAction_();
     toast("Fetched ✓");
   }catch(e){console.error("DOI fetch failed:",e);toast("Couldn't fetch that DOI — paste the abstract instead");}
   btn.textContent="Fetch";btn.disabled=false;
@@ -663,7 +710,9 @@ function buildBrief(){
     let b="CONTENT TYPE: New research paper highlight.\n";
     if(paperMeta)b+=`Title: ${paperMeta.title}\nAuthors: ${paperMeta.authors}\nJournal: ${paperMeta.journal} ${paperMeta.year}\n`;
     if(txt)b+=`Summary/abstract: ${txt}\n`; if(angle)b+=`Angle: ${angle}\n`;
-    return{brief:b,withImage:!!figure,meta1:paperMeta?(paperMeta.authorCredit||paperMeta.authors):"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
+    const credit=val("paperCredit")||defaultPaperCredit_();if(credit)b+=`Research credit for the caption: ${credit}\n`;
+    const sourceKey="paper:"+(normalizedPaperLink_(val("doi"))||(reviewSource&&reviewSource.submissionId)||txt||(paperMeta&&paperMeta.title)||"");
+    return{brief:b,sourceKey,paperCredit:credit,withImage:!!figure,meta1:paperMeta?(paperMeta.authorCredit||paperMeta.authors):"",meta2:paperMeta?(paperMeta.journal+(paperMeta.year?" · "+paperMeta.year:"")):"",eyebrow:"New publication"};
   }
   if(activeType==="event"){
     const title=val("evTitle"); if(!title)return{error:"Give the event a title first."};
@@ -733,7 +782,7 @@ function openAIGraphic_(){
     <details class="design-section"><summary>Paper facts &amp; full prompt</summary><div style="padding:14px"><label class="fld"><span class="lab">Source material</span><textarea class="ai-source" id="aiSource" maxlength="16000">${esc(source)}</textarea></label><label class="fld"><span class="lab">Prompt <span class="hint">(editable)</span></span><textarea class="ai-prompt" id="aiPrompt" maxlength="22000"></textarea></label><button class="btn sm" id="refreshAIPrompt">Rebuild prompt from options</button></div></details>
     <div id="aiOpenAISettings" hidden style="margin-top:14px"><label class="fld"><span class="lab">OpenAI API key</span><input type="password" id="aiImageKey" autocomplete="off" placeholder="sk-…" spellcheck="false"></label><label class="design-check"><input type="checkbox" id="aiRememberKey" checked>Keep this key for this browser tab</label><div class="row"><label class="fld"><span class="lab">Quality</span><select id="aiQuality"><option value="low">Draft · lower cost</option><option value="medium">Standard</option><option value="high">Detailed · higher cost</option></select></label><label class="fld"><span class="lab">Image model</span><input value="GPT Image 2.5 Flare" disabled></label></div><p class="ai-help">Generation uses your OpenAI API balance; it is separate from a ChatGPT subscription. Your key is sent directly to OpenAI and is never included in a post or gallery entry. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener">Current pricing ↗</a> · <button class="btn ghost sm" id="aiForgetKey">Forget image key</button></p></div>
     <p class="ai-help" id="aiMethodHelp"></p><div class="out-acts"><button class="btn primary" id="runAIGraphic">Generate image</button><button class="btn" id="copyAIPrompt">Copy prompt</button><label class="btn" for="aiImportImage">Upload generated image</label><input type="file" id="aiImportImage" accept="image/jpeg,image/png,image/webp" hidden></div>
-    <p class="ai-status" id="aiStatus" role="status" aria-live="polite"></p><div class="ai-result" id="aiResult" hidden><img id="aiResultImage" alt="Generated concept preview"><label class="fld"><span class="lab">Image description / alt text</span><textarea id="aiResultAlt" maxlength="1200"></textarea></label><p class="ai-help">Review the illustration and labels against the paper before using it.</p><button class="btn green" id="useAIImage">Use this graphic</button></div>`,true);
+    <p class="ai-status" id="aiStatus" role="status" aria-live="polite"></p><div class="ai-result" id="aiResult" hidden><img id="aiResultImage" alt="Generated concept preview"><label class="fld"><span class="lab">Image description / alt text</span><textarea id="aiResultAlt" maxlength="1200"></textarea></label><p class="ai-help">Check the illustration against the paper. This image will be attached to your post and kept when you generate its caption.</p><button class="btn green" id="useAIImage">${current.type==="paper"?"Use image &amp; continue to caption":"Use this graphic"}</button></div>`,true);
   const panel=document.getElementById("scrim");let promptEdited=false;
   const readOptions=()=>({method:val("aiMethod"),style:val("aiStyle"),audience:val("aiAudience"),text:val("aiText"),format:val("aiFormat"),quality:val("aiQuality")||"medium",direction:val("aiDirection")});
   for(const [id,key] of Object.entries({aiMethod:"method",aiStyle:"style",aiAudience:"audience",aiText:"text",aiFormat:"format",aiQuality:"quality"}))document.getElementById(id).value=options[key];
@@ -758,7 +807,7 @@ function openAIGraphic_(){
     try{
       const result=method==="claude"?await generateClaudeArt_(key,prompt,requestOptions):await generateOpenAIArt_(key,prompt,requestOptions);
       if(current!==draftRef){status("The draft changed while this image was being generated. Reopen AI Generate from the current draft.");return;}
-      aiArtCandidate={...result,draft:draftRef,format:requestOptions.format};showCandidate(aiArtCandidate);status("Your concept is ready. Check the science and choose Use this graphic when you’re happy with it.");
+      aiArtCandidate={...result,draft:draftRef,format:requestOptions.format};showCandidate(aiArtCandidate);status("Your image is ready. Review it below, then select it to continue with your post.");
     }catch(error){status(String(error.message||"Image generation failed. Try again or use Prompt + upload.").slice(0,350));}
     finally{aiArtBusy=false;if(panel.isConnected)button.disabled=false;}
   };
@@ -767,7 +816,7 @@ function openAIGraphic_(){
     if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>8*1024*1024){status("Upload a JPEG, PNG, or WebP under 8 MB.");return;}
     try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});const img=await loadImg(dataUrl);if(!img)throw new Error("This image could not be opened.");aiArtCandidate={dataUrl,draft:draftRef,format:val("aiFormat"),alt:"Conceptual illustration for "+((paperGalleryDraft&&paperGalleryDraft.title)||currentGraphic.headline||"this research paper")};showCandidate(aiArtCandidate);status("Image loaded. Review it, then choose Use this graphic.");}catch(error){status(error.message||"This image could not be opened.");}
   };
-  document.getElementById("useAIImage").onclick=()=>{if(!aiArtCandidate||aiArtCandidate.draft!==current){status("This preview belongs to an earlier draft. Generate or upload an image for the current draft.");return;}aiArtCandidate.alt=val("aiResultAlt");applyAIArt_(aiArtCandidate);closeModal();renderGraphicTab();toast("Unbranded graphic applied ✓");};
+  document.getElementById("useAIImage").onclick=()=>{if(!aiArtCandidate||aiArtCandidate.draft!==current){status("This preview belongs to an earlier draft. Generate or upload an image for the current draft.");return;}aiArtCandidate.alt=val("aiResultAlt");applyAIArt_(aiArtCandidate);continueWithAIImage_();};
   refresh();
 }
 async function imageApiJson_(url,options){
@@ -827,7 +876,7 @@ function applyAIArt_(candidate){
   g.figure=candidate.dataUrl;g.template=candidate.format==="square"?"art-square":"art";g.imageFit="contain";g.design=null;g.generatedImage=true;g.generatedAlt=candidate.alt;g.artUndo=undo;current.alt_text=candidate.alt;
   const credit=reviewImageCredit();if(credit)current.caption=String(current.caption||"").split("\n").filter(line=>line.trim()!=="📷 "+credit).join("\n").trim();
 }
-function restoreAIArt_(){const undo=currentGraphic&&currentGraphic.artUndo;if(!undo)return;currentGraphic={...undo.graphic};current.caption=withReviewImageCredit(current.caption,!!undo.graphic.generatedImage);current.alt_text=undo.alt;if(undo.slide&&currentSlides[undo.slideIndex])currentSlides[undo.slideIndex]=undo.slide;renderGraphicTab();toast("Previous graphic restored");}
+function restoreAIArt_(){const undo=currentGraphic&&currentGraphic.artUndo;if(!undo)return;currentGraphic={...undo.graphic};current.caption=withReviewImageCredit(current.caption,!!undo.graphic.generatedImage);current.alt_text=undo.alt;if(undo.slide&&currentSlides[undo.slideIndex])currentSlides[undo.slideIndex]=undo.slide;renderOutput();refreshDraftAction_();toast("Previous graphic restored");}
 
 /* ===== Claude ===== */
 const LEN_GUIDE={short:"1–2 punchy sentences (~150 chars).",medium:"3–5 sentences (~125–300 chars — IG's sweet spot).",long:"a fuller caption up to ~600 chars with a short hook first."};
@@ -849,14 +898,19 @@ function buildSourceBrief_(){
   return built;
 }
 async function draft(){
+  if(draftBusy)return;
   const key=getApiKey(); if(!key){openKeyModal();return;}
   const built=buildSourceBrief_(); const errBox=document.getElementById("srcErr"); errBox.innerHTML="";
+  const captionError=document.getElementById("captionErr");if(captionError)captionError.textContent="";
   if(built.error){errBox.innerHTML=`<div class="err">${esc(built.error)}</div>`;return;}
   lastBuilt=built;
+  const requestType=activeType,selectedArt=sameDraftSource_(built)&&currentGraphic&&currentGraphic.generatedImage;
   const s=getSettings();
   const sys=`You are the social-media editor for ${s.dept}${s.handle?` (Instagram ${s.handle})`:""}, a university engineering department.
 You produce TWO things from each brief: (1) a feed CAPTION and (2) the short TEXT THAT GOES ON THE GRAPHIC ITSELF.
 Voice: ${s.voice}
+${requestType==="paper"?paperCaptionRules_(built):""}
+${selectedArt?"An image is already selected for this post. Write the caption and hashtags to accompany it; do not suggest replacing or regenerating that image. Its illustration is conceptual and is not scientific evidence.":""}
 Rules: never overstate, hype, or fabricate a research claim; if a fact isn't given, don't invent it. Treat the brief as the complete source material: do not ask the user to open a URL or supply facts, and omit unsupported specifics instead. No markdown. Emoji sparingly if it fits.
 Caption length: ${LEN_GUIDE[s.length]||LEN_GUIDE.medium}
 Graphic text must be SHORT and legible on a phone-sized post: headline punchy (<= 8 words), subhead a single clause.
@@ -865,22 +919,48 @@ Hashtags: return no more than ${MAX_HASHTAGS}, without the # symbol. Every hasht
 Return ONLY valid JSON, no preamble, no code fences:
 {"caption":string,"hashtags":[string],"alt_text":string,"headline":string,"subhead":string,"pull_quote":string}`;
   const content=[{type:"text",text:"Brief:\n\n"+built.brief}];
-  if(built.withImage&&activeType==="reel"&&reelCover){content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:reelCover.split(",")[1]}});}
+  if(selectedArt){content.push({type:"text",text:"Selected conceptual image description (visual context only, not additional research facts): "+(currentGraphic.generatedAlt||"")});}
+  else if(built.withImage&&activeType==="reel"&&reelCover){content.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:reelCover.split(",")[1]}});}
   else if(built.withImage&&figure){content.push({type:"image",source:{type:"base64",media_type:figure.mediaType||"image/jpeg",data:figure.dataUrl.split(",")[1]}});}
   else if(built.withImage)photos.forEach(p=>content.push({type:"image",source:{type:"base64",media_type:p.mediaType||"image/jpeg",data:p.dataUrl.split(",")[1]}}));
   setLoading(true);
   try{
     const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:s.model,max_tokens:1200,system:sys,messages:[{role:"user",content}]})});
-    if(res.status===401){setLoading(false);errBox.innerHTML=`<div class="err">API key was rejected — check it under "API key".</div>`;return;}
+    if(res.status===401)throw new Error('API key was rejected — check it under "API key".');
     if(!res.ok){throw new Error((await res.text()).slice(0,160));}
     const data=await res.json();
     const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").replace(/```json|```/g,"").trim();
     let p; try{p=JSON.parse(text);}catch(e){const m=text.match(/\{[\s\S]*\}/);p=m?JSON.parse(m[0]):{caption:text,hashtags:[],alt_text:"",headline:"",subhead:"",pull_quote:""};}
+    if(requestType==="paper"){
+      if(paperCaptionIssues_(p.caption,built).length){
+        const repair=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:s.model,max_tokens:1200,system:"Edit a research caption using only the supplied source facts. "+paperCaptionRules_(built)+' Return ONLY JSON: {"caption":string}. Preserve supported claims and use natural third-person grammar.',messages:[{role:"user",content:JSON.stringify({source:built.brief,caption:p.caption,fix:paperCaptionIssues_(p.caption,built)})}]})});
+        if(!repair.ok)throw new Error("The caption needs an authorship correction. Try generating it again; your selected image is still attached.");
+        const repaired=await repair.json(),repairedText=(repaired.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").replace(/```json|```/g,"").trim();
+        try{p.caption=JSON.parse(repairedText).caption;}catch(e){throw new Error("The caption correction couldn't be read. Generate again or edit the caption; your image is still attached.");}
+      }
+      if(paperCaptionIssues_(p.caption,built).length)throw new Error("The generated caption still needs the research credit corrected. Check Research group / authors to credit, then try again or write the caption. Your image is still attached.");
+      p.caption=withPaperBio_(p.caption);
+    }
+    const latest=buildSourceBrief_();if(activeType!==requestType||latest.error||latest.brief!==built.brief||latest.sourceKey!==built.sourceKey){toast("The source changed during generation. Generate again for the current paper details.");return;}
     initOutput(p,built);
-  }catch(e){errBox.innerHTML=`<div class="err">Something went wrong: ${esc(String(e.message||e).slice(0,160))}</div>`;}
-  setLoading(false);
+  }catch(e){const message=String(e.message||e).slice(0,320);errBox.innerHTML=`<div class="err">${esc(message)}</div>`;const inline=document.getElementById("captionErr");if(inline)inline.textContent=message;}
+  finally{setLoading(false);}
 }
-function setLoading(on){document.getElementById("glowbar").className="glowbar"+(on?" on":"");const b=document.getElementById("draftBtn");b.disabled=on;b.textContent=on?"Generating…":"Generate post";}
+function setLoading(on){draftBusy=on;document.getElementById("glowbar").className="glowbar"+(on?" on":"");refreshDraftAction_();}
+function paperCaptionRules_(built){
+  return `PAPER CAPTION REQUIREMENTS: Speak as a department sharing someone else's research, always in third person. Never use we, our, ours, us, I, or my to describe the research, even if the abstract uses first person. Cite the research group when the source explicitly names it; otherwise cite the supplied authors and their colleagues. Never assume the last author leads a lab or invent a group name. ${built.paperCredit?"Include this exact supplied research credit naturally in the caption: "+JSON.stringify(built.paperCredit)+". This is the research attribution, not an image credit.":"Use author or group names from the source when available; if no author information is supplied, say ‘the researchers’ without inventing names."} End with a brief invitation to read the paper via the link in bio. These requirements take precedence over a first-person voice preference or wording copied from the abstract.`;
+}
+function paperCaptionIssues_(caption,built){
+  const text=String(caption||"").trim(),issues=[];
+  if(!text)issues.push("Write a nonempty caption.");
+  if(/\b(?:we|our|ours|ourselves|my|mine|myself)\b/i.test(text)||/\b(?:I|us)\b/.test(text))issues.push("Rewrite first-person wording in third person and credit the researchers.");
+  const normalize=value=>String(value||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+  if(built.paperCredit&&!normalize(text).includes(normalize(built.paperCredit)))issues.push("Include the exact supplied research credit: "+built.paperCredit);
+  return issues;
+}
+function withPaperBio_(caption){
+  const text=String(caption||"").trim();return !text||/\blink\s+in\s+(?:(?:the|our)\s+)?bio\b/i.test(text)?text:text+"\n\nRead the paper via the link in bio.";
+}
 
 /* ===== output state ===== */
 let current=null, currentGraphic=null, currentSlides=[], activeSlideIndex=0, activeTab="caption";
@@ -926,11 +1006,12 @@ function filterDraftHashtags_(values,brief){
   return out;
 }
 function initOutput(p,built){
-  const sameSource=current&&current.type===activeType&&current.imageSourceBrief===built.brief;
+  const sameSource=sameDraftSource_(built);
   const retainedGallery=sameSource&&paperGalleryDraft?{...paperGalleryDraft}:null;
-  const retainedArt=currentGraphic&&currentGraphic.generatedImage&&current&&current.type===activeType&&current.imageSourceBrief===built.brief?{...currentGraphic}:null;
+  const retainedArt=sameSource&&currentGraphic&&currentGraphic.generatedImage?{...currentGraphic}:null;
   current={caption:withReviewImageCredit(p.caption||"",!!retainedArt),hashtags:filterDraftHashtags_(p.hashtags,built.brief),alt_text:p.alt_text||"",type:activeType};
   current.imageSourceBrief=built.brief;
+  current.sourceKey=built.sourceKey||"";
   paperGalleryDraft=retainedGallery||(activeType==="paper"?{
     enabled:true,title:(paperMeta&&paperMeta.title)||(reviewSource&&reviewSource.title)||built.headlineHint||(p.headline!=="Your headline"?p.headline:"")||"",
     journal:(paperMeta&&paperMeta.journal)||"",authors:(paperMeta&&paperMeta.authors)||"",
@@ -956,13 +1037,14 @@ function initOutput(p,built){
   Object.assign(currentGraphic,look);
   if(!String(s.stylePreset).startsWith("saved:"))currentGraphic.imageFit=activeType==="reel"?"cover":"contain";
   if(retainedArt){Object.assign(currentGraphic,retainedArt);current.alt_text=retainedArt.generatedAlt||current.alt_text;}
-  renderOutput(); activeTab="graphic"; renderTab(); // show the graphic first — it's the point
+  activeTab=activeType==="paper"&&p.caption?"caption":"graphic";renderOutput();refreshDraftAction_();
 }
 function renderOutput(){
   document.getElementById("outArea").innerHTML=`
-    <div class="tabs"><div class="tab" data-t="caption">Caption</div><div class="tab" data-t="graphic">Graphic</div></div>
+    ${selectedPaperImage_()}<div class="tabs"><button class="tab" data-t="caption">Caption</button><button class="tab" data-t="graphic">${current.type==="paper"?"Graphic & review":"Graphic"}</button></div>
     <div id="tabBody"></div>`;
   document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{activeTab=t.dataset.t;renderTab();});
+  const change=document.getElementById("changePaperImage");if(change)change.onclick=openPaperImage_;
   renderTab();
 }
 function renderTab(){
@@ -971,14 +1053,15 @@ function renderTab(){
 }
 function renderCaptionTab(){
   const a=document.getElementById("tabBody");
-  a.innerHTML=`<textarea class="caption-out" id="capOut"></textarea>
+  const attached=current.type==="paper"&&currentGraphic&&currentGraphic.generatedImage;
+  a.innerHTML=`${attached&&!current.caption?'<p class="caption-next">Your image is selected. Generate its caption below, or write your own.</p>':""}<textarea class="caption-out" id="capOut" aria-label="Post caption" placeholder="Write your caption or use Generate caption below."></textarea>
     <div class="counts"><span><b id="charCount">0</b> chars <span id="charNote"></span></span><span><b id="tagCount">0</b>/${MAX_HASHTAGS} tags</span></div>
     <div class="tags" id="tagBox"></div>
     <div class="tag-editor"><input type="text" id="tagInput" maxlength="160" placeholder="Add #EnergyStorage or BatteryResearch" aria-label="Add hashtags"><button class="btn sm" id="addTag">Add hashtag</button></div>
     <span class="hint">Add one or several tags separated by spaces or commas. Click a tag above to remove it.</span>
     <div class="alt"><span class="lab">Alt text</span><span id="altText"></span></div>
-    <div class="out-acts"><button class="btn" id="copyCap">Copy caption</button><button class="btn" id="copyAll">Copy caption + tags</button><button class="btn ghost" id="regen">Regenerate</button></div>`;
-  const cap=document.getElementById("capOut");cap.value=current.caption;cap.oninput=()=>{current.caption=cap.value;updateCounts();};
+    <div class="out-acts"><button class="btn primary" id="regen"${draftBusy?" disabled":""}>${current.caption?"Regenerate caption":"Generate caption"}${attached?" · keep image":""}</button><button class="btn" id="copyCap">Copy caption</button><button class="btn" id="copyAll">Copy caption + tags</button>${current.type==="paper"?'<button class="btn green" id="reviewPaperPost">Review graphic &amp; approve →</button>':""}</div><p id="captionErr" role="alert" class="warn"></p>`;
+  const cap=document.getElementById("capOut");cap.value=current.caption;cap.oninput=()=>{current.caption=cap.value;updateCounts();refreshDraftAction_();};
   document.getElementById("altText").textContent=current.alt_text||"—";
   renderTags();updateCounts();
   const tagInput=document.getElementById("tagInput");
@@ -987,6 +1070,8 @@ function renderCaptionTab(){
   document.getElementById("copyCap").onclick=()=>copy(current.caption,"Caption copied");
   document.getElementById("copyAll").onclick=()=>copy(current.caption+"\n\n"+current.hashtags.map(h=>"#"+h).join(" "),"Copied");
   document.getElementById("regen").onclick=draft;
+  const review=document.getElementById("reviewPaperPost");if(review)review.onclick=()=>{activeTab="graphic";renderTab();};
+  refreshDraftAction_();
 }
 function addHashtagsFromInput_(){
   const input=document.getElementById("tagInput");if(!input)return;
@@ -1147,7 +1232,7 @@ function renderGraphicTab(){
     ${paperGalleryControls_()}
     <div class="out-acts"><button class="btn primary" id="dlGraphic">Download ${hasCarousel?`slide ${activeSlideIndex+1}`:"JPEG"} (${initialSize.label})</button>${hasCarousel?'<button class="btn" id="dlAllGraphics">Download all slides</button>':""}<button class="btn green" id="approveBtn">Approve${hasCarousel?` ${currentSlides.length}-image carousel`:""} → queue</button></div>`;
   bindPaperGalleryControls_();
-  const aiButton=document.getElementById("aiGenerate");if(aiButton)aiButton.onclick=openAIGraphic_;
+  const aiButton=document.getElementById("aiGenerate");if(aiButton)aiButton.onclick=activeType==="paper"?openPaperImage_:openAIGraphic_;
   const undoArt=document.getElementById("undoAIArt");if(undoArt)undoArt.onclick=restoreAIArt_;
   const redraw=()=>{
     const dc=document.getElementById("cardDisp"); if(dc)dc.style.maxWidth=previewWidth(g.template);
@@ -1790,9 +1875,12 @@ function approvalPaperGallery_(){
 }
 async function approve(){
   if(!current)return;
+  if(current.type==="paper"&&current.sourceKey&&(activeType!=="paper"||!sameDraftSource_(buildSourceBrief_()))){toast("The paper source changed. Generate a new post and review its image before approving.");return;}
+  if(current.type==="paper"&&!String(current.caption||"").trim()){activeTab="caption";renderTab();toast("Write or generate the paper caption before approving.");return;}
   let paperGallery;
   try{paperGallery=approvalPaperGallery_();}catch(error){toast(error.message);const details=document.getElementById("galleryLink")?.closest("details");if(details){details.open=true;document.getElementById("galleryLink").focus();}return;}
   current.caption=withReviewImageCredit(current.caption);
+  if(current.type==="paper")current.caption=withPaperBio_(current.caption);
   const sourceLink=(paperGallery&&paperGallery.articleUrl)||approvalSourceLink_();
   const slideCount=current.type==="photo"?currentSlides.length:1;
   const q=getQueue();q.unshift({id:Date.now(),type:current.type,caption:current.caption,hashtags:current.hashtags,alt_text:current.alt_text,sourceLink,slideCount,date:new Date().toISOString()});setQueue(q);
@@ -2000,12 +2088,13 @@ function applyReviewSubmission(item){
   renderTypes();renderForm();
   const draftDetails=reviewDetailsForDraft_(item);
   const context=[item.title,draftDetails].filter(Boolean).join("\n\n");
-  if(activeType==="paper"){setField("doi",item.link);setField("paperText",context);setField("paperAngle",item.credit);}
+  if(activeType==="paper"){setField("doi",item.link);setField("paperText",context);setField("paperCredit",defaultPaperCredit_());}
   if(activeType==="event"){setField("evTitle",item.title);setField("evDate",item.date);setField("evTime",item.time);setField("evLoc",item.location);setField("evDesc",draftDetails);setField("evLink",item.link);}
   if(activeType==="photo")setField("photoNote",context);
   if(activeType==="reel"){setField("reelLink",item.videoLink);setField("reelNote",context);reelVideoLink=item.videoLink||"";}
   if(activeType==="repost"){setField("rpHandle",item.credit);setField("rpWhat",context);setField("rpWhy",item.submitter==="Discovery Bot"?"Identified from an official source for department review":"Submitted by "+(item.submitter||"department member"));setField("rpLink",item.link);}
   window.scrollTo({top:0,behavior:"smooth"});
+  refreshDraftAction_();
 }
 function reviewDetailsForDraft_(item){
   const raw=String(item&&item.details||"").trim();
