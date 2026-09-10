@@ -123,7 +123,7 @@ for(const preset of json('Object.keys(STYLE_PRESETS)')) {
   await run('draft()');
   assert.match(context.sentPrompt.system,/Lead with a question about the students/);
   assert.match(context.sentPrompt.system,/graphic wording only/);
-  assert.equal(run('current.caption'),"Grounded in the source");
+  assert.equal(run('current.caption'),"Grounded in the source\n\nRead the paper via the link in bio.");
   assert.equal(errBox.innerHTML,"");
 
   // A slow image from an older render must not replace the latest edited preview.
