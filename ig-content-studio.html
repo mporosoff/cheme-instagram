@@ -57,7 +57,7 @@
   label.fld{display:block;margin-bottom:14px;}
   label.fld .lab{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
   label.fld .hint{font-weight:400;color:var(--slate);}
-  input[type=text],input[type=date],input[type=color],textarea,select{width:100%;font-family:inherit;font-size:14px;color:var(--ink);padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;}
+  input[type=text],input[type=password],input[type=date],input[type=color],textarea,select{width:100%;font-family:inherit;font-size:14px;color:var(--ink);padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;}
   input[type=color]{height:38px;padding:4px;cursor:pointer;}
   textarea{resize:vertical;min-height:84px;line-height:1.5;}
   .row{display:flex;gap:10px;}
@@ -232,7 +232,7 @@
   <div class="acts">
     <button class="btn ghost sm" id="reviewBtn">Review queue</button>
     <button class="btn ghost sm" id="settingsBtn">Voice &amp; brand</button>
-    <button class="btn ghost sm" id="keyBtn">API key</button>
+    <button class="btn ghost sm" id="keyBtn">API keys</button>
   </div>
 </header>
 
@@ -279,6 +279,23 @@ function ssSet(k,v){try{sessionStorage.setItem(k,v);}catch(e){mem[k]=v;}}
 function lsGet(k){try{return localStorage.getItem(k);}catch(e){return mem[k]??null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
 function getApiKey(){return lsGet("igs2_key")||ssGet("igs2_key")||"";}
+function getImageApiKey(){return lsGet("igs2_image_key")||ssGet("igs2_image_key")||"";}
+function saveApiKeys_(anthropic,openai,remember=true){
+  const entries=[["igs2_key",String(anthropic||"").trim()],["igs2_image_key",String(openai||"").trim()]],before=[];
+  try{
+    // Record both stores before changing either provider. A failed save must
+    // leave the existing keys usable and must never claim persistent success.
+    for(const [key] of entries)for(const storage of [localStorage,sessionStorage])before.push({storage,key,value:storage.getItem(key)});
+    before.push({storage:localStorage,key:"igs2_remember_keys",value:localStorage.getItem("igs2_remember_keys")});
+    for(const [key,value] of entries){localStorage.setItem(key,remember?value:"");sessionStorage.setItem(key,remember?"":value);}
+    localStorage.setItem("igs2_remember_keys",remember?"1":"0");
+    for(const [key] of entries)delete mem[key];delete mem.igs2_remember_keys;
+    return true;
+  }catch(error){
+    for(const item of before){try{if(item.value===null)item.storage.removeItem(item.key);else item.storage.setItem(item.key,item.value);}catch(ignored){}}
+    return false;
+  }
+}
 function setApiKey(key,remember){
   if(remember){lsSet("igs2_key",key);ssSet("igs2_key","");}
   else{ssSet("igs2_key",key);lsSet("igs2_key","");}
@@ -780,29 +797,41 @@ function openAIGraphic_(){
       <label class="fld full"><span class="lab">Your creative direction</span><textarea id="aiDirection" maxlength="1500" placeholder="e.g. Use a familiar everyday analogy, a warm palette, and make the material the hero">${esc(options.direction)}</textarea></label>
     </div>
     <details class="design-section"><summary>Paper facts &amp; full prompt</summary><div style="padding:14px"><label class="fld"><span class="lab">Source material</span><textarea class="ai-source" id="aiSource" maxlength="16000">${esc(source)}</textarea></label><label class="fld"><span class="lab">Prompt <span class="hint">(editable)</span></span><textarea class="ai-prompt" id="aiPrompt" maxlength="22000"></textarea></label><button class="btn sm" id="refreshAIPrompt">Rebuild prompt from options</button></div></details>
-    <div id="aiOpenAISettings" hidden style="margin-top:14px"><label class="fld"><span class="lab">OpenAI API key</span><input type="password" id="aiImageKey" autocomplete="off" placeholder="sk-…" spellcheck="false"></label><label class="design-check"><input type="checkbox" id="aiRememberKey" checked>Keep this key for this browser tab</label><div class="row"><label class="fld"><span class="lab">Quality</span><select id="aiQuality"><option value="low">Draft · lower cost</option><option value="medium">Standard</option><option value="high">Detailed · higher cost</option></select></label><label class="fld"><span class="lab">Image model</span><input value="GPT Image 2.5 Flare" disabled></label></div><p class="ai-help">Generation uses your OpenAI API balance; it is separate from a ChatGPT subscription. Your key is sent directly to OpenAI and is never included in a post or gallery entry. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener">Current pricing ↗</a> · <button class="btn ghost sm" id="aiForgetKey">Forget image key</button></p></div>
+    <div id="aiKeySettings" style="margin-top:14px"><span class="ai-help" id="aiKeyStatus" role="status"></span> <button class="btn sm" id="aiManageKeys">Manage API keys</button></div>
+    <div id="aiOpenAISettings" hidden style="margin-top:14px"><div class="row"><label class="fld"><span class="lab">Quality</span><select id="aiQuality"><option value="low">Draft · lower cost</option><option value="medium">Standard</option><option value="high">Detailed · higher cost</option></select></label><label class="fld"><span class="lab">Image model</span><input value="GPT Image 2.5 Flare" disabled></label></div><p class="ai-help">Generation uses your OpenAI API balance; it is separate from a ChatGPT subscription. The saved OpenAI key is used automatically. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener">Current pricing ↗</a></p></div>
     <p class="ai-help" id="aiMethodHelp"></p><div class="out-acts"><button class="btn primary" id="runAIGraphic">Generate image</button><button class="btn" id="copyAIPrompt">Copy prompt</button><label class="btn" for="aiImportImage">Upload generated image</label><input type="file" id="aiImportImage" accept="image/jpeg,image/png,image/webp" hidden></div>
     <p class="ai-status" id="aiStatus" role="status" aria-live="polite"></p><div class="ai-result" id="aiResult" hidden><img id="aiResultImage" alt="Generated concept preview"><label class="fld"><span class="lab">Image description / alt text</span><textarea id="aiResultAlt" maxlength="1200"></textarea></label><p class="ai-help">Check the illustration against the paper. This image will be attached to your post and kept when you generate its caption.</p><button class="btn green" id="useAIImage">${current.type==="paper"?"Use image &amp; continue to caption":"Use this graphic"}</button></div>`,true);
   const panel=document.getElementById("scrim");let promptEdited=false;
   const readOptions=()=>({method:val("aiMethod"),style:val("aiStyle"),audience:val("aiAudience"),text:val("aiText"),format:val("aiFormat"),quality:val("aiQuality")||"medium",direction:val("aiDirection")});
   for(const [id,key] of Object.entries({aiMethod:"method",aiStyle:"style",aiAudience:"audience",aiText:"text",aiFormat:"format",aiQuality:"quality"}))document.getElementById(id).value=options[key];
-  document.getElementById("aiImageKey").value=ssGet("igs2_image_key")||"";
-  const refresh=()=>{aiArtOptions=readOptions();if(!promptEdited)document.getElementById("aiPrompt").value=aiArtPrompt_(aiArtOptions,val("aiSource"));const method=aiArtOptions.method;document.getElementById("aiOpenAISettings").hidden=method!=="openai";document.getElementById("runAIGraphic").hidden=method==="prompt";document.getElementById("runAIGraphic").textContent=method==="claude"?"Generate illustrated diagram":"Generate image";document.getElementById("aiMethodHelp").textContent=method==="prompt"?"Copy the ready-to-use prompt into an image generator you already use, then upload the result here. This route makes no API calls from the Studio.":method==="claude"?"Uses the Studio’s existing Claude API key and normal text API usage to create a clean illustrated diagram. Photo-inspired ideas become illustrations in this mode.":"Creates one new image from the paper facts and your prompt. It usually takes a minute or two. Nothing is published automatically.";};
+  const refresh=()=>{
+    aiArtOptions=readOptions();if(!promptEdited)document.getElementById("aiPrompt").value=aiArtPrompt_(aiArtOptions,val("aiSource"));
+    const method=aiArtOptions.method,key=method==="openai"?getImageApiKey():getApiKey(),provider=method==="openai"?"OpenAI":"Anthropic",stored=lsGet(method==="openai"?"igs2_image_key":"igs2_key");
+    document.getElementById("aiKeySettings").hidden=method==="prompt";
+    document.getElementById("aiKeyStatus").textContent=key?`${provider} key ready · ${stored?"saved in this browser":"this tab only"}`:`Add your ${provider} key in API keys.`;
+    document.getElementById("aiOpenAISettings").hidden=method!=="openai";document.getElementById("runAIGraphic").hidden=method==="prompt";document.getElementById("runAIGraphic").textContent=method==="claude"?"Generate illustrated diagram":"Generate image";
+    document.getElementById("aiMethodHelp").textContent=method==="prompt"?"Copy the ready-to-use prompt into an image generator you already use, then upload the result here. This route makes no API calls from the Studio.":method==="claude"?"Uses the saved Anthropic key and normal text API usage to create a clean illustrated diagram. Photo-inspired ideas become illustrations in this mode.":"Uses the saved OpenAI key to create an image from the paper facts and your prompt. It usually takes a minute or two. Nothing is published automatically.";
+  };
+  const manageKeys=()=>{
+    // Keep the editor mounted so prompt edits, options and image previews survive
+    // both saving and cancelling the shared key dialog.
+    panel.id="aiKeyReturn";panel.style.display="none";
+    openKeyModal({provider:val("aiMethod")==="openai"?"openai":"anthropic",onClose:()=>{panel.id="scrim";panel.style.display="";refresh();document.getElementById("aiManageKeys").focus();}});
+  };
+  document.getElementById("aiManageKeys").onclick=manageKeys;
   ["aiMethod","aiStyle","aiAudience","aiText","aiFormat","aiQuality","aiDirection","aiSource"].forEach(id=>document.getElementById(id).oninput=refresh);
   document.getElementById("aiPrompt").oninput=()=>{promptEdited=true;};
   document.getElementById("refreshAIPrompt").onclick=()=>{promptEdited=false;refresh();};
   document.getElementById("closeAI").onclick=closeModal;
   document.getElementById("copyAIPrompt").onclick=()=>copy(val("aiPrompt"),"Image prompt copied");
-  document.getElementById("aiForgetKey").onclick=()=>{ssSet("igs2_image_key","");document.getElementById("aiImageKey").value="";toast("Image key removed");};
   const status=message=>{if(panel.isConnected)document.getElementById("aiStatus").textContent=message;};
   const showCandidate=candidate=>{if(!panel.isConnected||current!==draftRef)return;document.getElementById("aiResult").hidden=false;document.getElementById("aiResultImage").src=candidate.dataUrl;document.getElementById("aiResultAlt").value=candidate.alt||"";};
   if(aiArtCandidate&&aiArtCandidate.draft===draftRef)showCandidate(aiArtCandidate);
   document.getElementById("runAIGraphic").onclick=async()=>{
     if(aiArtBusy){status("An image is already being generated. Please wait.");return;}
-    const requestOptions=readOptions();aiArtOptions={...requestOptions};const method=requestOptions.method,prompt=val("aiPrompt"),key=method==="claude"?getApiKey():val("aiImageKey");
-    if(!key){status(method==="claude"?"Add your Claude key using API key at the top of the Studio, then reopen AI Generate.":"Enter an OpenAI API key above to generate an image, or choose Prompt + upload.");return;}
+    const requestOptions=readOptions();aiArtOptions={...requestOptions};const method=requestOptions.method,prompt=val("aiPrompt"),key=method==="claude"?getApiKey():getImageApiKey();
+    if(!key){status("Add the missing key in API keys, then generate your image. Your prompt and options will be kept.");manageKeys();return;}
     if(!prompt||!val("aiSource")){status("Add the source facts and a prompt first.");return;}
-    if(method==="openai")ssSet("igs2_image_key",document.getElementById("aiRememberKey").checked?key:"");
     aiArtBusy=true;const button=document.getElementById("runAIGraphic");button.disabled=true;status("Creating your concept… You can keep this window open while it works.");
     try{
       const result=method==="claude"?await generateClaudeArt_(key,prompt,requestOptions):await generateOpenAIArt_(key,prompt,requestOptions);
@@ -926,7 +955,7 @@ Return ONLY valid JSON, no preamble, no code fences:
   setLoading(true);
   try{
     const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:s.model,max_tokens:1200,system:sys,messages:[{role:"user",content}]})});
-    if(res.status===401)throw new Error('API key was rejected — check it under "API key".');
+    if(res.status===401)throw new Error('The Anthropic key was rejected — check it under "API keys".');
     if(!res.ok){throw new Error((await res.text()).slice(0,160));}
     const data=await res.json();
     const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").replace(/```json|```/g,"").trim();
@@ -2112,16 +2141,26 @@ function reviewDetailsForDraft_(item){
 function setField(id,value){const el=document.getElementById(id);if(el)el.value=value||"";}
 
 /* ===== modals ===== */
-function openKeyModal(){
-  const cur=getApiKey();
-  modal(`<h2>Anthropic API key</h2><p>Used to draft captions and graphic text with Claude and sent directly to Anthropic.</p>
-    <input type="password" id="keyIn" placeholder="sk-ant-..." value="${esc(cur)}" autocomplete="off">
-    <label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;cursor:pointer"><input type="checkbox" id="rememberApiKey" checked style="margin-top:3px"><span><b>Remember on this browser</b><br><span class="hint">Recommended only on your private computer. Uncheck this on a shared device.</span></span></label>
-    <div class="out-acts" style="margin-top:16px"><button class="btn primary" id="saveKey">Save key</button>${cur?'<button class="btn ghost" id="forgetKey">Forget key</button>':''}<button class="btn ghost" id="closeM">Cancel</button></div>
-    <div class="note">Get one at console.anthropic.com → API keys. Sonnet is the default — plenty for this and inexpensive.</div>`);
-  document.getElementById("saveKey").onclick=()=>{const x=val("keyIn");if(x){setApiKey(x,document.getElementById("rememberApiKey").checked);toast("Key saved ✓");}closeModal();};
-  if(document.getElementById("forgetKey"))document.getElementById("forgetKey").onclick=()=>{forgetApiKey();closeModal();toast("API key removed");};
-  document.getElementById("closeM").onclick=closeModal;setTimeout(()=>document.getElementById("keyIn").focus(),50);
+function openKeyModal({provider="anthropic",onClose=null}={}){
+  const anthropic=getApiKey(),openai=getImageApiKey(),remember=lsGet("igs2_remember_keys")!=="0";
+  if(document.getElementById("scrim"))closeModal();
+  modal(`<h2>API keys</h2><p>Add both keys here once. The Studio automatically uses the right key for captions and images.</p>
+    <label class="fld"><span class="lab">Anthropic API key</span><input type="password" id="keyIn" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><span class="hint">Claude captions, graphic text, and illustrated diagrams.</span></label>
+    <label class="fld"><span class="lab">OpenAI API key</span><input type="password" id="imageKeyIn" placeholder="sk-…" autocomplete="off" spellcheck="false"><span class="hint">AI image generation. Optional if you only use Claude or prompt + upload.</span></label>
+    <label style="display:flex;gap:9px;align-items:flex-start;margin:14px 0;cursor:pointer"><input type="checkbox" id="rememberApiKey"${remember?" checked":""} style="margin-top:3px"><span><b>Remember both keys in this browser</b><br><span class="hint">Keep them after closing the Studio or restarting the browser. Uncheck to use this tab only.</span></span></label>
+    <p class="hint">Keys are saved on this device, sent only to their respective provider, and never included in posts, the gallery, or exported presets. Clearing browser data removes saved keys.</p>
+    <p id="apiKeyError" class="warn" role="alert"></p>
+    <div class="out-acts"><button class="btn primary" id="saveKey">Save keys</button><button class="btn ghost" id="clearKeys">Clear both fields</button><button class="btn ghost" id="closeM">Cancel</button></div>`);
+  const keyPanel=document.getElementById("scrim"),finish=()=>{closeModal();if(typeof onClose==="function")onClose();};
+  document.getElementById("keyIn").value=anthropic;document.getElementById("imageKeyIn").value=openai;
+  document.getElementById("saveKey").onclick=()=>{
+    const retain=document.getElementById("rememberApiKey").checked;
+    if(!saveApiKeys_(val("keyIn"),val("imageKeyIn"),retain)){document.getElementById("apiKeyError").textContent="Could not save the keys. Check that browser storage is allowed, then try again.";return;}
+    const any=!!(val("keyIn")||val("imageKeyIn"));finish();toast(any?(retain?"API keys saved in this browser ✓":"API keys saved for this tab ✓"):"Saved API keys removed");
+  };
+  document.getElementById("clearKeys").onclick=()=>{document.getElementById("keyIn").value="";document.getElementById("imageKeyIn").value="";document.getElementById("apiKeyError").textContent="Choose Save keys to remove both saved keys, or Cancel to keep them.";};
+  document.getElementById("closeM").onclick=finish;keyPanel.onclick=e=>{if(e.target===keyPanel)finish();};
+  document.getElementById(provider==="openai"?"imageKeyIn":"keyIn").focus();
 }
 function openSettings(){
   const s=getSettings();
