@@ -8,7 +8,7 @@ A small, no-server toolkit for running the University of Rochester Chemical and 
 |---|---|---|
 | `ig-content-studio.html` | The **Content Studio** — review department submissions, generate captions + graphics, and hit **Approve**. | You |
 | `cheme-submission-form.html` | A **submission form** colleagues can use to send you raw material. | Colleagues (optional) |
-| `papers.html` | A public, searchable **paper library** linking new posted graphics to their articles. | Instagram visitors |
+| `papers.html` | A public, searchable **paper library** linking research posts to their original articles. | Instagram visitors |
 | `Code.gs` | A Google Apps Script that catches submissions/approvals and files them into a Google Sheet. | Behind the scenes |
 | `Discovery.gs` | Optional faculty-news/publication discovery that adds verified-by-you leads to the review queue. | Behind the scenes |
 | `SETUP.md` | The full, do-this-then-that setup guide (≈1 hour, mostly one-time). | You |
@@ -44,7 +44,7 @@ Use **API keys** in the header to add both the Anthropic and OpenAI keys. **Reme
 
 Closing and reopening the image editor for the same paper keeps its prompt, options, and preview in the current Studio tab, including while an image is being generated or its caption is regenerated. Keep that tab open: reloading or closing the Studio does not save the draft or artwork. Use **Generate another image** to try a new candidate; it replaces the post image only when you select **Use image & continue to caption**. **Restore previous graphic** reverses an applied replacement. Caption regeneration preserves the artwork and gallery edits when the source paper is unchanged.
 
-The **[paper library](https://mporosoff.github.io/cheme-instagram/papers.html)** runs on the existing free GitHub Pages site. Add its URL to Instagram’s bio links or Linktree once. Under **Paper gallery** in the Studio, review the article title and DOI/link, and optionally add journal, authors, year, and a short summary. New approved paper posts appear automatically with their published graphic when Make records **Posted**. Earlier posts are not backfilled, and drafts or failed posts stay private. Uncheck the gallery option to exclude an individual paper. No Make changes or additional hosting subscription are needed.
+The **[paper library](https://mporosoff.github.io/cheme-instagram/papers.html)** runs on the existing free GitHub Pages site. Add its URL to Instagram’s bio links or Linktree once. Under **Paper gallery** in the Studio, review the article title and DOI/link, and optionally add journal, authors, year, and a short summary. New approved paper posts appear automatically when Make records **Posted**, in compact cards with the article title, metadata, and a **Read the paper** link. Earlier posts are not backfilled, and drafts or failed posts stay private. Uncheck the gallery option to exclude an individual paper. No Make changes or additional hosting subscription are needed.
 
 Reels use a separate Make route: the Studio records a shared Google Drive MP4 or MOV file, Make downloads it, Cloudinary supplies the public video URL, and Instagram publishes it as a Reel.
 
