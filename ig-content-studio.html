@@ -256,7 +256,7 @@
     <div class="panel-body" id="outArea">
       <div class="out-empty">
         <div class="reactor" aria-hidden="true"></div>
-        Add your material and hit <b>Generate post</b>.<br>
+        Add your material, then choose an image or generate a caption.<br>
         You get an editable caption <i>and</i> a ready-to-post Instagram graphic.
       </div>
     </div>
@@ -516,7 +516,7 @@ function renderForm(){
       <label class="fld"><span class="lab">Or paste the abstract / a one-line summary</span><textarea id="paperText" placeholder="Paste the abstract or describe the finding..."></textarea></label>
       <label class="fld"><span class="lab">Angle <span class="hint">(optional)</span></span><input type="text" id="paperAngle" placeholder="e.g. celebrate the grad-student first author"></label>
       <label class="fld"><span class="lab">Research group / authors to credit</span><input type="text" id="paperCredit" maxlength="300" placeholder="e.g. Shestopalov group"><span class="hint">Filled from the paper or submission when available. Edit this to name the group exactly as it should appear in the caption.</span></label>
-      ${figureSlot("Use a paper figure (optional)")}<button class="btn" id="paperAIGenerate">✦ Create an AI image</button><p class="hint" style="margin-top:8px">Choose a generated image, then write its caption. Your chosen image stays with the post.</p>`;
+      <div class="paper-steps"><strong>2. Create the post image</strong><p>Generate an illustration from the paper details, review it, then select it for your post.</p><button class="btn primary" id="paperAIGenerate">✦ Generate AI image</button><p class="hint" style="margin-top:8px">You can return here to review the result or generate another image.</p></div>${figureSlot("Or upload a paper figure (optional)")}`;
     if(paperMeta)renderPaperMeta();
     document.getElementById("fetchDoi").onclick=fetchDoi; wireFigure();
     document.getElementById("paperCredit").value=defaultPaperCredit_();
@@ -627,8 +627,8 @@ function wireFigure(){
   fi.onchange=e=>readFigure(e.target.files[0]);
   renderFigThumb();
 }
-function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; cancelPendingReviewMedia_(); const r=new FileReader(); r.onload=()=>{figure={dataUrl:r.result,name:f.name,mediaType:f.type};renderFigThumb();if(currentGraphic){currentGraphic.figure=figure.dataUrl;drawCard();}}; r.readAsDataURL(f); }
-function renderFigThumb(){ const t=document.getElementById("figThumb"); if(!t)return; t.innerHTML=""; if(figure){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${figure.dataUrl}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{figure=null;renderFigThumb();if(currentGraphic){currentGraphic.figure=null;drawCard();}};t.appendChild(d);} }
+function readFigure(f){ if(!f||!f.type.startsWith("image/"))return; cancelPendingReviewMedia_(); const r=new FileReader(); r.onload=()=>{figure={dataUrl:r.result,name:f.name,mediaType:f.type};renderFigThumb();if(currentGraphic&&currentGraphic.generatedImage){toast("Source image added. Your selected AI image is still attached to the post.");}else if(currentGraphic){currentGraphic.figure=figure.dataUrl;drawCard();}}; r.readAsDataURL(f); }
+function renderFigThumb(){ const t=document.getElementById("figThumb"); if(!t)return; t.innerHTML=""; if(figure){const d=document.createElement("div");d.className="thumb";d.innerHTML=`<img src="${figure.dataUrl}" alt=""><button title="Remove">×</button>`;d.querySelector("button").onclick=()=>{figure=null;renderFigThumb();if(currentGraphic&&currentGraphic.generatedImage){toast("Source image removed. Your selected AI image is still attached to the post.");}else if(currentGraphic){currentGraphic.figure=null;drawCard();}};t.appendChild(d);} }
 function renderPaperMeta(){const box=document.getElementById("paperMetaBox");if(!box||!paperMeta)return;box.innerHTML=`<div class="meta-card"><div class="t">${esc(paperMeta.title)}</div><div class="m">${esc(paperMeta.authors)}${paperMeta.journal?" · "+esc(paperMeta.journal):""}${paperMeta.year?" · "+paperMeta.year:""}</div></div>`;}
 
 /* ===== photo / carousel (becomes the post) ===== */
@@ -678,14 +678,15 @@ let draftBusy=false;
 function refreshDraftAction_(){
   const button=document.getElementById("draftBtn"),help=document.getElementById("draftHelp");if(!button)return;
   const paper=activeType==="paper",built=paper?buildSourceBrief_():null,same=paper&&sameDraftSource_(built),selected=same&&currentGraphic&&currentGraphic.generatedImage;
-  button.disabled=draftBusy;button.textContent=draftBusy?"Generating…":selected?(current.caption?"Regenerate caption · keep image":"Generate caption · keep image"):(same&&current.caption?"Regenerate post":"Generate post");
+  button.disabled=draftBusy;button.textContent=draftBusy?"Generating…":selected?(current.caption?"Regenerate caption · keep image":"Generate caption · keep image"):paper?(same&&current.caption?"Regenerate caption":"Generate caption"):(same&&current.caption?"Regenerate post":"Generate post");
   if(help)help.textContent=selected?"Your selected AI image will stay exactly as shown. This step writes the caption and hashtags.":paper?(currentGraphic&&currentGraphic.generatedImage&&!same?"The paper details changed. Choose an image for this paper; the earlier image will not carry over.":"Choose an AI image above, or generate a caption with a paper-card design."):"";
   const imageHelp=document.getElementById("selectedImageHelp");if(imageHelp)imageHelp.textContent=same?"Caption generation keeps this image. Approval sends it with your caption.":"This image belongs to the earlier paper. Choose an image for the current paper before generating its caption.";
   const regen=document.getElementById("regen");if(regen){regen.disabled=draftBusy;regen.textContent=draftBusy?"Generating caption…":(same||!paper?(current&&current.caption?"Regenerate caption":"Generate caption"):"Generate new post")+(selected?" · keep image":"");}
 }
 function selectedPaperImage_(){
-  if(!current||current.type!=="paper"||!currentGraphic||!currentGraphic.generatedImage)return"";
-  return `<div class="selected-paper-image"><img src="${esc(currentGraphic.figure)}" alt="Selected image for this post"><div><strong>Selected image for this post ✓</strong><p id="selectedImageHelp">Caption generation keeps this image. Approval sends it with your caption.</p><button class="btn sm" id="changePaperImage">Change image</button></div></div>`;
+  if(!current||current.type!=="paper"||!currentGraphic)return"";
+  if(!currentGraphic.generatedImage)return `<div class="paper-steps"><strong>Post image</strong><p>Create an AI illustration from your paper. Review the preview and choose Use image &amp; continue to caption to attach it.</p><button class="btn primary" id="changePaperImage">✦ Generate AI image</button></div>`;
+  return `<div class="selected-paper-image"><img src="${esc(currentGraphic.figure)}" alt="Selected image for this post"><div><strong>Selected image for this post ✓</strong><p id="selectedImageHelp">Caption generation keeps this image. Approval sends it with your caption.</p><button class="btn sm" id="changePaperImage">View image / generate another</button></div></div>`;
 }
 function continueWithAIImage_(){
   closeModal();activeTab=current.type==="paper"?"caption":"graphic";renderOutput();refreshDraftAction_();
@@ -774,8 +775,31 @@ const AI_ART_STYLES={
   photo:{name:"Photo-inspired concept",prompt:"A photographic-style conceptual still life using objects and materials relevant to the source. Use cinematic natural light. This is an illustrative scene, never a claimed photo of the actual experiment, authors, sample, or results."},
   abstract:{name:"Abstract / minimal",prompt:"A sophisticated minimal abstract composition suggesting the central physical concept through texture, color, and form. No invented measurements, atomistic structures, or specific mechanisms."}
 };
-let aiArtOptions={method:"prompt",style:"explainer",audience:"general",text:"labels",format:"portrait",quality:"medium",direction:""};
-let aiArtCandidate=null,aiArtBusy=false;
+let aiArtOptions={method:null,style:"explainer",audience:"general",text:"labels",format:"portrait",quality:"medium",direction:""};
+let aiArtBusy=false;
+function preferredAIArtMethod_(){
+  const saved=lsGet("igs2_image_method");
+  return ["openai","claude","prompt"].includes(saved)?saved:getImageApiKey()?"openai":getApiKey()?"claude":"openai";
+}
+function aiArtSession_(){
+  if(!current.aiArtSession){
+    const options={...aiArtOptions,method:aiArtOptions.method||preferredAIArtMethod_()};
+    const source=String(current.imageSourceBrief||(lastBuilt&&lastBuilt.brief)||"");
+    const candidate=currentGraphic.generatedImage?{dataUrl:currentGraphic.figure,alt:currentGraphic.generatedAlt||current.alt_text,format:currentGraphic.template==="art-square"?"square":"portrait"}:null;
+    current.aiArtSession={options,source,sourceBasis:source,sourceEdited:false,prompt:aiArtPrompt_(options,source),promptEdited:false,candidate,busy:false,status:""};
+  }
+  const session=current.aiArtSession,latest=String(current.imageSourceBrief||"");
+  if(!session.busy&&latest!==session.sourceBasis){
+    if(!session.sourceEdited)session.source=latest;
+    if(!session.promptEdited)session.prompt=aiArtPrompt_(session.options,session.source);
+    session.status="The paper details changed. Review the source facts and prompt before generating another image.";
+    session.sourceBasis=latest;
+  }
+  return current.aiArtSession;
+}
+function aiArtSessionCurrent_(session){
+  return !!(current&&current.aiArtSession===session&&current.type===activeType&&(!current.sourceKey||sameDraftSource_(buildSourceBrief_())));
+}
 function aiArtPrompt_(options,source){
   const style=AI_ART_STYLES[options.style]||AI_ART_STYLES.explainer;
   const audience={general:"a curious member of the public with no chemistry background",student:"an undergraduate science student",technical:"a scientifically literate reader outside this specialty"}[options.audience]||"a general audience";
@@ -785,32 +809,42 @@ function aiArtPrompt_(options,source){
 function openAIGraphic_(){
   if(!current||!currentGraphic){toast("Add the paper information and start a draft first.");return;}
   if(document.getElementById("scrim"))closeModal();
-  const draftRef=current,options={...aiArtOptions};
-  const source=String(current.imageSourceBrief||(lastBuilt&&lastBuilt.brief)||"");
-  modal(`<div class="ai-heading"><div><h2>✦ AI Generate</h2><p>Turn the paper into a visual someone can understand at a glance.</p></div><button class="btn ghost sm" id="closeAI">Close</button></div>
+  const session=aiArtSession_(),options=session.options,source=session.source;
+  modal(`<div class="ai-heading"><div><h2>✦ Generate AI image</h2><p>1. Choose a method → 2. Generate → 3. Use image for your post</p></div><button class="btn ghost sm" id="closeAI">Close</button></div>
     <div class="ai-options">
-      <label class="fld full"><span class="lab">How to create the image</span><select id="aiMethod"><option value="prompt">Prompt + upload · no image API needed</option><option value="claude">Illustrated diagram · existing Claude key</option><option value="openai">AI image · OpenAI image API</option></select></label>
+      <label class="fld full"><span class="lab">How to create the image</span><select id="aiMethod"><option value="openai">Generate AI image here · OpenAI</option><option value="claude">Generate illustrated diagram here · Claude</option><option value="prompt">Generate elsewhere · copy prompt + upload</option></select></label>
+      <details class="design-section full"><summary>Style &amp; creative direction <span class="hint">(optional)</span></summary><div class="ai-options" style="padding:14px">
       <label class="fld"><span class="lab">Starting idea</span><select id="aiStyle">${Object.entries(AI_ART_STYLES).map(([key,style])=>`<option value="${key}">${style.name}</option>`).join("")}</select></label>
       <label class="fld"><span class="lab">Audience</span><select id="aiAudience"><option value="general">General public</option><option value="student">Undergraduate students</option><option value="technical">Scientists outside the field</option></select></label>
       <label class="fld"><span class="lab">Text in the graphic</span><select id="aiText"><option value="none">No text · image first</option><option value="headline">One short headline</option><option value="labels">A few simple labels</option></select></label>
       <label class="fld"><span class="lab">Format</span><select id="aiFormat"><option value="portrait">Portrait · 4:5</option><option value="square">Square · 1:1</option></select></label>
       <label class="fld full"><span class="lab">Your creative direction</span><textarea id="aiDirection" maxlength="1500" placeholder="e.g. Use a familiar everyday analogy, a warm palette, and make the material the hero">${esc(options.direction)}</textarea></label>
+      </div></details>
     </div>
     <details class="design-section"><summary>Paper facts &amp; full prompt</summary><div style="padding:14px"><label class="fld"><span class="lab">Source material</span><textarea class="ai-source" id="aiSource" maxlength="16000">${esc(source)}</textarea></label><label class="fld"><span class="lab">Prompt <span class="hint">(editable)</span></span><textarea class="ai-prompt" id="aiPrompt" maxlength="22000"></textarea></label><button class="btn sm" id="refreshAIPrompt">Rebuild prompt from options</button></div></details>
     <div id="aiKeySettings" style="margin-top:14px"><span class="ai-help" id="aiKeyStatus" role="status"></span> <button class="btn sm" id="aiManageKeys">Manage API keys</button></div>
     <div id="aiOpenAISettings" hidden style="margin-top:14px"><div class="row"><label class="fld"><span class="lab">Quality</span><select id="aiQuality"><option value="low">Draft · lower cost</option><option value="medium">Standard</option><option value="high">Detailed · higher cost</option></select></label><label class="fld"><span class="lab">Image model</span><input value="GPT Image 2.5 Flare" disabled></label></div><p class="ai-help">Generation uses your OpenAI API balance; it is separate from a ChatGPT subscription. The saved OpenAI key is used automatically. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener">Current pricing ↗</a></p></div>
-    <p class="ai-help" id="aiMethodHelp"></p><div class="out-acts"><button class="btn primary" id="runAIGraphic">Generate image</button><button class="btn" id="copyAIPrompt">Copy prompt</button><label class="btn" for="aiImportImage">Upload generated image</label><input type="file" id="aiImportImage" accept="image/jpeg,image/png,image/webp" hidden></div>
-    <p class="ai-status" id="aiStatus" role="status" aria-live="polite"></p><div class="ai-result" id="aiResult" hidden><img id="aiResultImage" alt="Generated concept preview"><label class="fld"><span class="lab">Image description / alt text</span><textarea id="aiResultAlt" maxlength="1200"></textarea></label><p class="ai-help">Check the illustration against the paper. This image will be attached to your post and kept when you generate its caption.</p><button class="btn green" id="useAIImage">${current.type==="paper"?"Use image &amp; continue to caption":"Use this graphic"}</button></div>`,true);
-  const panel=document.getElementById("scrim");let promptEdited=false;
+    <div class="ai-actions"><p class="ai-help" id="aiMethodHelp"></p><div class="out-acts"><button class="btn primary" id="runAIGraphic">Generate image</button><button class="btn" id="copyAIPrompt">Copy prompt</button><label class="btn" for="aiImportImage">Upload generated image</label><input type="file" id="aiImportImage" accept="image/jpeg,image/png,image/webp" hidden></div><p class="ai-status" id="aiStatus" role="status" aria-live="polite"></p></div>
+    <div class="ai-result" id="aiResult" hidden><strong>Image preview · select it to attach to your post</strong><img id="aiResultImage" alt="Generated concept preview"><label class="fld"><span class="lab">Image description / alt text</span><textarea id="aiResultAlt" maxlength="1200"></textarea></label><p class="ai-help">Check the illustration against the paper. This image will be attached to your post and kept when you generate its caption.</p><button class="btn green" id="useAIImage">${current.type==="paper"?"Use image &amp; continue to caption":"Use this graphic"}</button></div>`,true);
+  const panel=document.getElementById("scrim");
   const readOptions=()=>({method:val("aiMethod"),style:val("aiStyle"),audience:val("aiAudience"),text:val("aiText"),format:val("aiFormat"),quality:val("aiQuality")||"medium",direction:val("aiDirection")});
   for(const [id,key] of Object.entries({aiMethod:"method",aiStyle:"style",aiAudience:"audience",aiText:"text",aiFormat:"format",aiQuality:"quality"}))document.getElementById(id).value=options[key];
+  document.getElementById("aiPrompt").value=session.prompt;
+  const sync=()=>{
+    session.options=readOptions();session.source=val("aiSource");session.prompt=val("aiPrompt");
+    if(session.candidate)session.candidate.alt=val("aiResultAlt");
+  };
   const refresh=()=>{
-    aiArtOptions=readOptions();if(!promptEdited)document.getElementById("aiPrompt").value=aiArtPrompt_(aiArtOptions,val("aiSource"));
-    const method=aiArtOptions.method,key=method==="openai"?getImageApiKey():getApiKey(),provider=method==="openai"?"OpenAI":"Anthropic",stored=lsGet(method==="openai"?"igs2_image_key":"igs2_key");
+    session.options=readOptions();if(!session.promptEdited)document.getElementById("aiPrompt").value=aiArtPrompt_(session.options,val("aiSource"));
+    const method=session.options.method,key=method==="openai"?getImageApiKey():getApiKey(),provider=method==="openai"?"OpenAI":"Anthropic",stored=lsGet(method==="openai"?"igs2_image_key":"igs2_key");
     document.getElementById("aiKeySettings").hidden=method==="prompt";
     document.getElementById("aiKeyStatus").textContent=key?`${provider} key ready · ${stored?"saved in this browser":"this tab only"}`:`Add your ${provider} key in API keys.`;
-    document.getElementById("aiOpenAISettings").hidden=method!=="openai";document.getElementById("runAIGraphic").hidden=method==="prompt";document.getElementById("runAIGraphic").textContent=method==="claude"?"Generate illustrated diagram":"Generate image";
+    document.getElementById("aiOpenAISettings").hidden=method!=="openai";
+    const button=document.getElementById("runAIGraphic");button.hidden=false;button.disabled=session.busy;
+    button.textContent=session.busy?"Generating image…":method==="prompt"?"Copy prompt to generate elsewhere":!key?`Add ${provider} key to generate`:session.candidate?"Generate another image":method==="claude"?"Generate illustrated diagram":"Generate image";
     document.getElementById("aiMethodHelp").textContent=method==="prompt"?"Copy the ready-to-use prompt into an image generator you already use, then upload the result here. This route makes no API calls from the Studio.":method==="claude"?"Uses the saved Anthropic key and normal text API usage to create a clean illustrated diagram. Photo-inspired ideas become illustrations in this mode.":"Uses the saved OpenAI key to create an image from the paper facts and your prompt. It usually takes a minute or two. Nothing is published automatically.";
+    document.getElementById("aiImportImage").disabled=session.busy;
+    sync();
   };
   const manageKeys=()=>{
     // Keep the editor mounted so prompt edits, options and image previews survive
@@ -820,33 +854,51 @@ function openAIGraphic_(){
   };
   document.getElementById("aiManageKeys").onclick=manageKeys;
   ["aiMethod","aiStyle","aiAudience","aiText","aiFormat","aiQuality","aiDirection","aiSource"].forEach(id=>document.getElementById(id).oninput=refresh);
-  document.getElementById("aiPrompt").oninput=()=>{promptEdited=true;};
-  document.getElementById("refreshAIPrompt").onclick=()=>{promptEdited=false;refresh();};
+  document.getElementById("aiMethod").oninput=()=>{lsSet("igs2_image_method",val("aiMethod"));if(!session.busy){session.status="";document.getElementById("aiStatus").textContent="";}refresh();};
+  document.getElementById("aiSource").oninput=()=>{session.sourceEdited=true;refresh();};
+  document.getElementById("aiPrompt").oninput=()=>{session.promptEdited=true;sync();};
+  document.getElementById("aiResultAlt").oninput=sync;
+  document.getElementById("refreshAIPrompt").onclick=()=>{session.promptEdited=false;refresh();};
+  panel.onClose=sync;
   document.getElementById("closeAI").onclick=closeModal;
   document.getElementById("copyAIPrompt").onclick=()=>copy(val("aiPrompt"),"Image prompt copied");
-  const status=message=>{if(panel.isConnected)document.getElementById("aiStatus").textContent=message;};
-  const showCandidate=candidate=>{if(!panel.isConnected||current!==draftRef)return;document.getElementById("aiResult").hidden=false;document.getElementById("aiResultImage").src=candidate.dataUrl;document.getElementById("aiResultAlt").value=candidate.alt||"";};
-  if(aiArtCandidate&&aiArtCandidate.draft===draftRef)showCandidate(aiArtCandidate);
+  // Completion updates the current editor, including one reopened while a request was running.
+  session.render=()=>{
+    if(!panel.isConnected||!current||current.aiArtSession!==session)return;
+    document.getElementById("aiStatus").textContent=session.status;
+    const candidate=session.candidate;
+    document.getElementById("aiResult").hidden=!candidate;
+    if(candidate){document.getElementById("aiResultImage").src=candidate.dataUrl;document.getElementById("aiResultAlt").value=candidate.alt||"";}
+    document.getElementById("useAIImage").disabled=session.busy;
+    refresh();
+  };
+  const status=message=>{session.status=message;session.render();};
   document.getElementById("runAIGraphic").onclick=async()=>{
-    if(aiArtBusy){status("An image is already being generated. Please wait.");return;}
-    const requestOptions=readOptions();aiArtOptions={...requestOptions};const method=requestOptions.method,prompt=val("aiPrompt"),key=method==="claude"?getApiKey():getImageApiKey();
+    if(!aiArtSessionCurrent_(session)){status("The paper changed. Close this window and generate an image for the current paper.");return;}
+    if(session.busy||aiArtBusy){status("An image is already being generated. Please wait.");return;}
+    sync();const requestOptions={...session.options},method=requestOptions.method,prompt=session.prompt,key=method==="claude"?getApiKey():getImageApiKey();
+    const requestFacts=session.source,requestBrief=current.sourceKey?buildSourceBrief_().brief:null;
+    if(method==="prompt"){copy(prompt,"Image prompt copied");status("Paste the prompt into your image generator, then use Upload generated image to bring the result back here.");return;}
     if(!key){status("Add the missing key in API keys, then generate your image. Your prompt and options will be kept.");manageKeys();return;}
     if(!prompt||!val("aiSource")){status("Add the source facts and a prompt first.");return;}
-    aiArtBusy=true;const button=document.getElementById("runAIGraphic");button.disabled=true;status("Creating your concept… You can keep this window open while it works.");
+    aiArtBusy=true;session.busy=true;status("Creating your image… You can close this window and reopen it to see the result. Keep this Studio tab open.");
     try{
       const result=method==="claude"?await generateClaudeArt_(key,prompt,requestOptions):await generateOpenAIArt_(key,prompt,requestOptions);
-      if(current!==draftRef){status("The draft changed while this image was being generated. Reopen AI Generate from the current draft.");return;}
-      aiArtCandidate={...result,draft:draftRef,format:requestOptions.format};showCandidate(aiArtCandidate);status("Your image is ready. Review it below, then select it to continue with your post.");
+      if(!aiArtSessionCurrent_(session))return;
+      if(session.source!==requestFacts||(requestBrief!==null&&buildSourceBrief_().brief!==requestBrief)){status("The paper facts changed during generation. Generate again using the updated facts; the outdated result was not attached.");return;}
+      session.candidate={...result,format:requestOptions.format};status("Your image is ready. Review it below, then choose Use image & continue to caption to attach it.");
     }catch(error){status(String(error.message||"Image generation failed. Try again or use Prompt + upload.").slice(0,350));}
-    finally{aiArtBusy=false;if(panel.isConnected)button.disabled=false;}
+    finally{aiArtBusy=false;session.busy=false;session.render();}
   };
   document.getElementById("aiImportImage").onchange=async event=>{
     const file=event.target.files[0];if(!file)return;
+    if(session.busy||!aiArtSessionCurrent_(session))return;
     if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>8*1024*1024){status("Upload a JPEG, PNG, or WebP under 8 MB.");return;}
-    try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});const img=await loadImg(dataUrl);if(!img)throw new Error("This image could not be opened.");aiArtCandidate={dataUrl,draft:draftRef,format:val("aiFormat"),alt:"Conceptual illustration for "+((paperGalleryDraft&&paperGalleryDraft.title)||currentGraphic.headline||"this research paper")};showCandidate(aiArtCandidate);status("Image loaded. Review it, then choose Use this graphic.");}catch(error){status(error.message||"This image could not be opened.");}
+    sync();const format=session.options.format;session.busy=true;session.render();
+    try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});const img=await loadImg(dataUrl);if(!img)throw new Error("This image could not be opened.");if(!aiArtSessionCurrent_(session))return;session.candidate={dataUrl,format,alt:"Conceptual illustration for "+((paperGalleryDraft&&paperGalleryDraft.title)||currentGraphic.headline||"this research paper")};status("Image loaded. Review it below, then select it to attach to your post.");}catch(error){status(error.message||"This image could not be opened.");}finally{session.busy=false;event.target.value="";session.render();}
   };
-  document.getElementById("useAIImage").onclick=()=>{if(!aiArtCandidate||aiArtCandidate.draft!==current){status("This preview belongs to an earlier draft. Generate or upload an image for the current draft.");return;}aiArtCandidate.alt=val("aiResultAlt");applyAIArt_(aiArtCandidate);continueWithAIImage_();};
-  refresh();
+  document.getElementById("useAIImage").onclick=()=>{if(session.busy||!session.candidate||!aiArtSessionCurrent_(session)){status("This preview is not ready for this draft. Generate or upload an image for the current draft.");return;}sync();applyAIArt_(session.candidate);continueWithAIImage_();};
+  session.render();
 }
 async function imageApiJson_(url,options){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),240000);
@@ -854,11 +906,12 @@ async function imageApiJson_(url,options){
 }
 function openAIArtRequest_(prompt,options){return{model:"gpt-image-2.5-flare",prompt:String(prompt).slice(0,22000),n:1,size:options.format==="square"?"1024x1024":"1024x1280",quality:["low","medium","high"].includes(options.quality)?options.quality:"medium",output_format:"jpeg",output_compression:90,background:"opaque"};}
 async function generateOpenAIArt_(key,prompt,options){
+  const title=(paperGalleryDraft&&paperGalleryDraft.title)||currentGraphic.headline||"this research paper";
   const data=await imageApiJson_("https://api.openai.com/v1/images/generations",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},body:JSON.stringify(openAIArtRequest_(prompt,options))});
   const encoded=data.data&&data.data[0]&&data.data[0].b64_json;
   if(!encoded||!/^[A-Za-z0-9+/=\s]+$/.test(encoded)||encoded.length>20*1024*1024)throw new Error("The service did not return a usable image.");
   const dataUrl="data:image/jpeg;base64,"+encoded,img=await loadImg(dataUrl);if(!img)throw new Error("The generated image could not be opened.");
-  return{dataUrl,alt:"AI-generated conceptual illustration for "+((paperGalleryDraft&&paperGalleryDraft.title)||currentGraphic.headline||"this research paper")};
+  return{dataUrl,alt:"AI-generated conceptual illustration for "+title};
 }
 const AI_DIAGRAM_ICONS=["layers","atom","flow","light","leaf","heat","beaker","drop","filter","chip"];
 function normalizeAIDiagram_(raw){
@@ -1036,11 +1089,13 @@ function filterDraftHashtags_(values,brief){
 }
 function initOutput(p,built){
   const sameSource=sameDraftSource_(built);
+  const retainedImageSession=sameSource&&current.aiArtSession;
   const retainedGallery=sameSource&&paperGalleryDraft?{...paperGalleryDraft}:null;
   const retainedArt=sameSource&&currentGraphic&&currentGraphic.generatedImage?{...currentGraphic}:null;
   current={caption:withReviewImageCredit(p.caption||"",!!retainedArt),hashtags:filterDraftHashtags_(p.hashtags,built.brief),alt_text:p.alt_text||"",type:activeType};
   current.imageSourceBrief=built.brief;
   current.sourceKey=built.sourceKey||"";
+  if(retainedImageSession)current.aiArtSession=retainedImageSession;
   paperGalleryDraft=retainedGallery||(activeType==="paper"?{
     enabled:true,title:(paperMeta&&paperMeta.title)||(reviewSource&&reviewSource.title)||built.headlineHint||(p.headline!=="Your headline"?p.headline:"")||"",
     journal:(paperMeta&&paperMeta.journal)||"",authors:(paperMeta&&paperMeta.authors)||"",
@@ -2093,7 +2148,7 @@ function applyReviewMedia_(item){
   const first=sourceImages[0];reviewSource.images=sourceImages;reviewSource.imageBase64=first.imageBase64;reviewSource.imageType=first.imageType||"image/jpeg";reviewSource.imageName=first.imageName||"submission.jpg";reviewSource.mediaPending=false;reviewSource.mediaError="";
   const dataUrl=first.dataUrl;
   if(activeType==="photo"){
-    photos=sourceImages.map(image=>withPlainOverlayDefaults_({dataUrl:image.dataUrl,name:image.imageName||"submission.jpg",mediaType:image.imageType||"image/jpeg",overlayCaption:image.overlayCaption||"",size:0}));syncCurrentSlides_();renderThumbs();
+    photos=sourceImages.map(image=>withPlainOverlayDefaults_({dataUrl:image.dataUrl,name:image.imageName||"submission.jpg",mediaType:image.imageType||"image/jpeg",overlayCaption:image.overlayCaption||"",size:0}));if(!currentGraphic||!currentGraphic.generatedImage)syncCurrentSlides_();renderThumbs();
     const drop=document.getElementById("drop");if(drop)drop.innerHTML=`${photos.length} source image${photos.length===1?"":"s"} loaded ✓ — <b>click or drop to add more</b><br><span style="font-size:12px">Verify credit and reuse rights before approval</span>`;
   }else if(activeType==="reel"){
     reelCover=dataUrl;renderReelThumb();
@@ -2101,7 +2156,7 @@ function applyReviewMedia_(item){
     figure={dataUrl,name:reviewSource.imageName,mediaType:reviewSource.imageType};renderFigThumb();
     const drop=document.getElementById("figDrop");if(drop)drop.innerHTML='Source image loaded ✓ — <b>click or drop to replace it</b>';
   }
-  if(currentGraphic){currentGraphic.figure=dataUrl;if(document.getElementById("cardDisp"))drawCard("cardDisp");}
+  if(currentGraphic&&!currentGraphic.generatedImage){currentGraphic.figure=dataUrl;if(document.getElementById("cardDisp"))drawCard("cardDisp");}
   renderLoadedReviewBanner();
 }
 function applyReviewSubmission(item){
@@ -2190,7 +2245,7 @@ function openSettings(){
   document.getElementById("settingsLibrary").onclick=()=>{closeModal();openDesignLibrary_();};
 }
 function modal(html,wide=false){const s=document.createElement("div");s.className="scrim";s.id="scrim";s.innerHTML=`<div class="modal${wide?" wide":""}">${html}</div>`;s.onclick=e=>{if(e.target===s)closeModal();};document.body.appendChild(s);}
-function closeModal(){const s=document.getElementById("scrim");if(s)s.remove();}
+function closeModal(){const s=document.getElementById("scrim");if(s){if(typeof s.onClose==="function")s.onClose();s.remove();}}
 
 /* ===== utils ===== */
 function val(id){const e=document.getElementById(id);return e?(e.value||"").trim():"";}
